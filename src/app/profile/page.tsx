@@ -13,6 +13,7 @@ import {
 } from "@/lib/store";
 import { bmiCategory, gameCountdownLabel, prettyDate, todayISO } from "@/lib/engine";
 import { GOAL_LABELS, POSITION_LABELS } from "@/lib/types";
+import { formatHeight, formatWeight, UNITS_LABELS } from "@/lib/units";
 
 export default function ProfilePage() {
   const { athlete, checkins, workouts } = useStore();
@@ -82,7 +83,8 @@ export default function ProfilePage() {
           <p className="eyebrow">Athlete file</p>
           <h1 className="display mt-2 text-[clamp(2rem,4.6vw,2.9rem)]">{athlete.name}</h1>
           <p className="mt-2 text-sm text-sand">
-            {POSITION_LABELS[athlete.position]} · {athlete.age} yrs · {athlete.heightCm} cm · {athlete.weightKg} kg ·{" "}
+            {POSITION_LABELS[athlete.position]} · {athlete.age} yrs ·{" "}
+            {formatHeight(athlete.heightCm, athlete.units)} · {formatWeight(athlete.weightKg, athlete.units)} ·{" "}
             {GOAL_LABELS[athlete.goal]}
           </p>
         </div>
@@ -115,6 +117,9 @@ export default function ProfilePage() {
                 ["Position", POSITION_LABELS[athlete.position]],
                 ["Goal", GOAL_LABELS[athlete.goal]],
                 ["Experience", athlete.experience],
+                ["Units", UNITS_LABELS[athlete.units ?? "metric"]],
+                ["Height", formatHeight(athlete.heightCm, athlete.units)],
+                ["Weight", formatWeight(athlete.weightKg, athlete.units)],
                 ["Session length", `${athlete.minutes} min`],
                 ["Days per week", `${athlete.daysPerWeek}`],
                 ["Next game", athlete.gameDate ? prettyDate(athlete.gameDate) : "Not scheduled"],

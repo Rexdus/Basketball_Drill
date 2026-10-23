@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { saveAthlete, type AthleteInput } from "@/lib/store";
 import {
+  cmToFtIn,
+  ftInToCm,
+  kgToLb,
+  lbToKg,
+  UNITS_LABELS,
+} from "@/lib/units";
+import {
   EQUIPMENT_LABELS,
   EXPERIENCE_LABELS,
   GOAL_LABELS,
@@ -14,6 +21,7 @@ import {
   type Goal,
   type Injury,
   type Position,
+  type Units,
 } from "@/lib/types";
 
 const EQUIPMENT_ORDER: Equipment[] = [
@@ -75,7 +83,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function parseProfileForm(form: HTMLFormElement): AthleteInput {
+function parseProfileForm(
+  form: HTMLFormElement,
+  measurements: { heightCm: number; weightKg: number; units: Units },
+): AthleteInput {
   const data = new FormData(form);
   const text = (key: string) => String(data.get(key) ?? "").trim();
   const num = (key: string, fallback: number) => {
@@ -93,8 +104,10 @@ function parseProfileForm(form: HTMLFormElement): AthleteInput {
   return {
     name: text("name") || "Hooper",
     age: clamp(Math.round(num("age", 20)), 10, 80),
-    heightCm: clamp(Math.round(num("heightCm", 180)), 120, 230),
-    weightKg: clamp(Math.round(num("weightKg", 75) * 10) / 10, 35, 200),
+    // Measurements arrive already converted to canonical metric units.
+    heightCm: clamp(Math.round(measurements.heightCm), 120, 230),
+    weightKg: clamp(Math.round(measurements.weightKg * 10) / 10, 35, 200),
+    units: measurements.units,
     position: (list("position")[0] ?? "unsure") as Position,
     experience: (list("experience")[0] ?? "intermediate") as Experience,
     goal: (list("goal")[0] ?? "balanced") as Goal,
@@ -123,11 +136,46 @@ export function ProfileForm({
   const [minutes, setMinutes] = useState(profile?.minutes ?? 55);
   const [days, setDays] = useState(profile?.daysPerWeek ?? 4);
 
+  // Unit system preference. Values are always kept canonically in metric;
+  // the inputs below display and convert according to the selected system.
+  const [units, setUnits] = useState<Units>(profile?.units ?? "metric");
+  const [heightCm, setHeightCm] = useState(profile?.heightCm ?? 180);
+  const initialFtIn = profile ? cmToFtIn(profile.heightCm) : { ft: 5, inch: 11 };
+  const [heightFt, setHeightFt] = useState(initialFtIn.ft);
+  const [heightIn, setHeightIn] = useState(initialFtIn.inch);
+  const [weight, setWeight] = useState(() =>
+    profile
+      ? (profile.units ?? "metric") === "imperial"
+        ? kgToLb(profile.weightKg)
+        : profile.weightKg
+      : 75,
+  );
+
+  function switchUnits(next: Units) {
+    if (next === units) return;
+    if (next === "imperial") {
+      const { ft, inch } = cmToFtIn(heightCm);
+      setHeightFt(ft);
+      setHeightIn(inch);
+      setWeight(kgToLb(weight));
+    } else {
+      setHeightCm(ftInToCm(heightFt, heightIn));
+      setWeight(lbToKg(weight));
+    }
+    setUnits(next);
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     try {
-      const input = parseProfileForm(event.currentTarget);
+      const heightCmValue = units === "metric" ? heightCm : ftInToCm(heightFt, heightIn);
+      const weightKgValue = units === "metric" ? weight : lbToKg(weight);
+      const input = parseProfileForm(event.currentTarget, {
+        heightCm: heightCmValue,
+        weightKg: weightKgValue,
+        units,
+      });
       if (!input.heightCm || !input.weightKg) {
         setMessage({ ok: false, text: "Add a valid height and weight so we can size your sessions." });
         return;
@@ -151,12 +199,30 @@ export function ProfileForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="panel p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="eyebrow">01 · Athlete</p>
             <h3 className="mt-1 text-lg font-semibold">Who is training?</h3>
           </div>
-          <span className="hidden text-[0.7rem] text-muted sm:block">Used to size every session</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[0.7rem] uppercase tracking-[0.1em] text-muted">Units</span>
+            <div className="flex gap-1 rounded-full border border-line bg-ink-2/70 p-1">
+              {(["metric", "imperial"] as Units[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => switchUnits(option)}
+                  className={`rounded-full px-3 py-1.5 text-[0.72rem] font-semibold transition-colors ${
+                    units === option
+                      ? "bg-flame/15 text-flame-2 shadow-[0_0_0_1px_rgba(255,90,31,0.25)]"
+                      : "text-muted hover:text-sand"
+                  }`}
+                >
+                  {option === "metric" ? "Metric" : "Imperial"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-4">
@@ -189,34 +255,70 @@ export function ProfileForm({
               required
             />
           </div>
-          <div>
-            <label className="field-label" htmlFor="heightCm">
-              Height (cm)
-            </label>
-            <input
-              id="heightCm"
-              name="heightCm"
-              type="number"
-              min={120}
-              max={230}
-              className="field"
-              defaultValue={profile?.heightCm ?? 180}
-              required
-            />
-          </div>
+          {units === "metric" ? (
+            <div>
+              <label className="field-label" htmlFor="heightCm">
+                Height (cm)
+              </label>
+              <input
+                id="heightCm"
+                name="heightCm"
+                type="number"
+                min={120}
+                max={230}
+                className="field"
+                value={heightCm}
+                onChange={(event) => setHeightCm(Number(event.target.value))}
+                required
+              />
+            </div>
+          ) : (
+            <div>
+              <span className="field-label">Height (ft + in)</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  id="heightFt"
+                  name="heightFt"
+                  type="number"
+                  min={3}
+                  max={8}
+                  step={1}
+                  className="field"
+                  placeholder="ft"
+                  value={heightFt}
+                  onChange={(event) => setHeightFt(Number(event.target.value))}
+                  required
+                />
+                <input
+                  id="heightIn"
+                  name="heightIn"
+                  type="number"
+                  min={0}
+                  max={11}
+                  step={1}
+                  className="field"
+                  placeholder="in"
+                  value={heightIn}
+                  onChange={(event) => setHeightIn(Number(event.target.value))}
+                  required
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="field-label" htmlFor="weightKg">
-              Weight (kg)
+              Weight ({units === "metric" ? "kg" : "lb"})
             </label>
             <input
               id="weightKg"
               name="weightKg"
               type="number"
-              min={35}
-              max={200}
-              step="0.1"
+              min={units === "metric" ? 35 : 77}
+              max={units === "metric" ? 200 : 440}
+              step={units === "metric" ? "0.1" : "0.5"}
               className="field"
-              defaultValue={profile?.weightKg ?? 75}
+              value={weight}
+              onChange={(event) => setWeight(Number(event.target.value))}
               required
             />
           </div>
@@ -233,6 +335,11 @@ export function ProfileForm({
             />
           </div>
         </div>
+
+        <p className="mt-3 text-[0.7rem] text-muted">
+          Using {UNITS_LABELS[units]} — stored as {profile || mode === "edit" ? "your preference" : "metric"} internally,
+          shown the way you like it.
+        </p>
 
         <fieldset className="mt-5">
           <legend className="field-label">Position</legend>

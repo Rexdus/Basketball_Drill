@@ -30,6 +30,7 @@ import {
   weekdayShort,
 } from "@/lib/engine";
 import { EQUIPMENT_LABELS, GOAL_LABELS, POSITION_LABELS, type CheckinInput } from "@/lib/types";
+import { formatHeight, formatWeight } from "@/lib/units";
 
 function checkinToInput(checkin: StoredCheckin | null): CheckinInput | null {
   if (!checkin) return null;
@@ -228,7 +229,12 @@ export default function HomePage() {
           </section>
 
           {todayWorkout ? (
-            <WorkoutView plan={todayWorkout.plan} workout={todayWorkout} bodyWeightKg={athlete.weightKg} />
+            <WorkoutView
+              plan={todayWorkout.plan}
+              workout={todayWorkout}
+              bodyWeightKg={athlete.weightKg}
+              units={athlete.units}
+            />
           ) : (
             <section className="panel p-6">
               <h2 className="text-lg font-semibold">No session yet</h2>
@@ -311,8 +317,8 @@ export default function HomePage() {
             <p className="mt-2 text-[0.84rem] leading-relaxed text-sand">{coachNote}</p>
             <div className="hairline my-4" />
             <div className="flex flex-wrap gap-2">
-              <Badge tone="outline">{athlete.heightCm} cm</Badge>
-              <Badge tone="outline">{athlete.weightKg} kg</Badge>
+              <Badge tone="outline">{formatHeight(athlete.heightCm, athlete.units)}</Badge>
+              <Badge tone="outline">{formatWeight(athlete.weightKg, athlete.units)}</Badge>
               <Badge tone="outline">{bmiCategory(athlete)}</Badge>
               <Badge tone="outline">{athlete.minutes} min sessions</Badge>
             </div>

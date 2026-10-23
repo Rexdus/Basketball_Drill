@@ -1,4 +1,5 @@
 export type Position = "guard" | "wing" | "big" | "unsure";
+export type Units = "metric" | "imperial";
 export type Experience = "beginner" | "intermediate" | "advanced";
 export type Goal = "vertical" | "speed" | "strength" | "conditioning" | "skill" | "recovery" | "balanced";
 export type Feeling = "fresh" | "good" | "okay" | "tired" | "wrecked";
@@ -30,8 +31,11 @@ export type AthleteProfile = {
   id: number;
   name: string;
   age: number;
+  // Measurements are always stored canonically in metric (cm / kg) — the
+  // engine works in those units. `units` only controls how the UI shows them.
   heightCm: number;
   weightKg: number;
+  units: Units;
   position: Position;
   experience: Experience;
   goal: Goal;

@@ -99,7 +99,10 @@ function newId(): string {
 /* ------------------------------------------------------------ raw access */
 
 export function getAthlete(): StoredAthlete | null {
-  return readJSON<StoredAthlete | null>(KEYS.athlete, null);
+  const athlete = readJSON<StoredAthlete | null>(KEYS.athlete, null);
+  // Normalize legacy profiles that predate the units preference.
+  if (athlete && !athlete.units) athlete.units = "metric";
+  return athlete;
 }
 
 export function listCheckins(): StoredCheckin[] {
@@ -240,6 +243,7 @@ export function saveAthlete(input: AthleteInput): StoredAthlete {
     id: existing?.id ?? input.id ?? 1,
     publicId: existing?.publicId ?? newId(),
     isDemo: existing?.isDemo ?? false,
+    units: input.units ?? existing?.units ?? "metric",
     updatedAt: new Date().toISOString(),
   };
   writeJSON(KEYS.athlete, athlete);
@@ -313,6 +317,7 @@ export function createDemoAthlete(): StoredAthlete {
     age: 22,
     heightCm: 188,
     weightKg: 82,
+    units: "metric",
     position: "guard",
     experience: "intermediate",
     goal: "vertical",

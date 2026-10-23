@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import type { StoredWorkout } from "@/lib/store";
 import { completeWorkout, skipWorkout } from "@/lib/store";
-import type { WorkoutPlan } from "@/lib/types";
+import type { Units, WorkoutPlan } from "@/lib/types";
+import { formatWeight } from "@/lib/units";
 import { Badge, IntensityBadge, Meter } from "./ui";
 
 const TYPE_ICON: Record<string, string> = {
@@ -26,11 +27,13 @@ export function WorkoutView({
   workout,
   showActions = true,
   bodyWeightKg = 75,
+  units = "metric",
 }: {
   plan: WorkoutPlan;
   workout?: StoredWorkout | null;
   showActions?: boolean;
   bodyWeightKg?: number;
+  units?: Units;
 }) {
   const [rpe, setRpe] = useState(7);
   const [feedback, setFeedback] = useState("");
@@ -138,7 +141,7 @@ export function WorkoutView({
                 <Meter value={waterPct} label={`Water ${(plan.nutrition.waterMl / 1000).toFixed(1)} L`} />
               </div>
               <p className="mt-2 text-[0.68rem] leading-snug text-[#7f8676]">
-                Daily targets for roughly {bodyWeightKg} kg of body mass.
+                Daily targets for roughly {formatWeight(bodyWeightKg, units)} of body mass.
               </p>
               <p className="mt-3 text-[0.74rem] leading-snug text-muted">{plan.nutrition.recoveryTip}</p>
             </div>

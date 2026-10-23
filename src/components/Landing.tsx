@@ -15,6 +15,7 @@ const SAMPLE_PROFILE: AthleteProfile = {
   age: 22,
   heightCm: 188,
   weightKg: 82,
+  units: "metric",
   position: "guard",
   experience: "intermediate",
   goal: "vertical",
