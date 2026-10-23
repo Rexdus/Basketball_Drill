@@ -1,11 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { Badge, IntensityBadge, LoadChart, SectionHeading, Stat } from "@/components/ui";
-import { getAthleteRow, getTodayContext, toProfile } from "@/lib/athlete";
+import { Badge, EmptyState, IntensityBadge, LoadChart, Stat } from "@/components/ui";
+import { useStore, readinessForDate } from "@/lib/store";
 import {
   addDays,
   buildWorkout,
-  daysToGame,
   gameCountdownLabel,
   prettyDate,
   todayISO,
@@ -13,27 +13,51 @@ import {
 } from "@/lib/engine";
 import { GOAL_LABELS } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
+export default function PlanPage() {
+  const { athlete, checkins } = useStore();
 
-export default async function PlanPage() {
-  const athlete = await getAthleteRow();
-  if (!athlete) redirect("/start");
-  const ctx = await getTodayContext();
-  const profile = toProfile(athlete);
-  const readiness = ctx?.readiness ?? 72;
+  if (!athlete) {
+    return (
+      <main className="mx-auto max-w-6xl px-5 pb-12 pt-8 sm:px-8">
+        <EmptyState
+          title="No athlete profile yet"
+          body="Create your athlete file and CourtReady will periodize your week around your next game."
+          action={
+            <Link href="/start" className="btn btn-primary">
+              Build my plan
+            </Link>
+          }
+        />
+      </main>
+    );
+  }
+
   const today = todayISO();
-  const gameDays = daysToGame(profile);
+  const readiness = readinessForDate(checkins, today);
+  const gameDays = athlete.gameDate
+    ? Math.round(
+        (new Date(`${athlete.gameDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) /
+          86_400_000,
+      )
+    : null;
   const span = gameDays !== null && gameDays > 0 && gameDays <= 12 ? gameDays : 6;
 
   const days = Array.from({ length: span + 1 }, (_, index) => {
     const date = addDays(today, index);
-    const remaining = daysToGame(profile, date);
-    const plan = buildWorkout({ profile, checkin: null, readiness, date, days: remaining });
+    const remaining = athlete.gameDate
+      ? Math.round(
+          (new Date(`${athlete.gameDate}T12:00:00`).getTime() - new Date(`${date}T12:00:00`).getTime()) /
+            86_400_000,
+        )
+      : null;
+    const plan = buildWorkout({ profile: athlete, checkin: null, readiness, date, days: remaining });
     return { date, remaining, plan };
   });
 
   const totalMinutes = days.reduce((acc, day) => acc + day.plan.durationMin, 0);
-  const hardDays = days.filter((day) => day.plan.intensity === "build" || day.plan.intensity === "peak").length;
+  const hardDays = days.filter(
+    (day) => day.plan.intensity === "build" || day.plan.intensity === "peak",
+  ).length;
   const gameDay = gameDays !== null && gameDays >= 0 && gameDays <= span;
 
   return (
@@ -45,14 +69,14 @@ export default async function PlanPage() {
             {gameCountdownLabel(gameDays)}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
-            {profile.gameDate
-              ? `Game: ${prettyDate(profile.gameDate)}. Each session below is built from the same profile and readiness baseline (${readiness}/100), with volume shifting as the game gets closer.`
+            {athlete.gameDate
+              ? `Game: ${prettyDate(athlete.gameDate)}. Each session below is built from the same profile and readiness baseline (${readiness}/100), with volume shifting as the game gets closer.`
               : "You haven't set a game date yet, so this is a rolling development week. Add your next tip-off in your profile to unlock the full taper."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/profile" className="btn btn-ghost">
-            {profile.gameDate ? "Change game date" : "Add a game date"}
+            {athlete.gameDate ? "Change game date" : "Add a game date"}
           </Link>
           <Link href="/" className="btn btn-primary">
             Today&apos;s session
@@ -64,14 +88,14 @@ export default async function PlanPage() {
         <Stat label="Window" value={`${days.length} days`} hint="Every day mapped to a purpose" />
         <Stat label="Planned minutes" value={totalMinutes} hint="Across the full runway" accent />
         <Stat label="Key sessions" value={hardDays} hint="Build or peak days — never back to back" />
-        <Stat label="Primary goal" value={GOAL_LABELS[profile.goal]} hint="Each day skews toward this" />
+        <Stat label="Primary goal" value={GOAL_LABELS[athlete.goal]} hint="Each day skews toward this" />
       </div>
 
-      {!profile.gameDate ? (
+      {!athlete.gameDate ? (
         <div className="panel mt-4 flex flex-wrap items-center justify-between gap-3 border-flame/30 bg-flame/[0.06] p-4">
           <p className="text-[0.84rem] text-sand">
-            <span className="font-semibold text-cream">Unlock the taper.</span> Set your next game date and CourtReady
-            will build the week backwards: develop → build → sharpen → taper → game day primer.
+            <span className="font-semibold text-cream">Unlock the taper.</span> Set your next game date and
+            CourtReady will build the week backwards: develop → build → sharpen → taper → game day primer.
           </p>
           <Link href="/profile" className="btn btn-primary !py-2 !text-[0.78rem]">
             Set game date
@@ -82,7 +106,10 @@ export default async function PlanPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         <section className="panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-soft px-5 py-4">
-            <SectionHeading eyebrow="Day by day" title="Your runway" />
+            <div>
+              <p className="eyebrow">Day by day</p>
+              <h2 className="mt-1 text-lg font-bold tracking-tight text-cream">Your runway</h2>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <Badge tone="outline">Develop</Badge>
               <Badge tone="flame">Build</Badge>
@@ -105,7 +132,11 @@ export default async function PlanPage() {
                         {new Date(`${day.date}T12:00:00`).getDate()}
                       </p>
                       <p className="text-[0.6rem] text-muted">
-                        {isGame ? "Game" : day.remaining !== null && day.remaining < 0 ? `+${Math.abs(day.remaining)}` : `T-${day.remaining}`}
+                        {isGame
+                          ? "Game"
+                          : day.remaining !== null && day.remaining < 0
+                            ? `+${Math.abs(day.remaining)}`
+                            : `T-${day.remaining}`}
                       </p>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -116,7 +147,8 @@ export default async function PlanPage() {
                         <IntensityBadge intensity={day.plan.intensity} />
                       </div>
                       <p className="mt-1 text-[0.78rem] text-muted">
-                        {day.plan.phase} · {day.plan.durationMin} min · load {day.plan.loadScore}/100 · {day.plan.blocks.length} blocks
+                        {day.plan.phase} · {day.plan.durationMin} min · load {day.plan.loadScore}/100 ·{" "}
+                        {day.plan.blocks.length} blocks
                       </p>
                       <details className="mt-2">
                         <summary className="cursor-pointer text-[0.75rem] font-semibold text-flame-2">
@@ -135,10 +167,7 @@ export default async function PlanPage() {
                             </div>
                           ))}
                           {index === 0 ? (
-                            <Link
-                              href="/"
-                              className="mt-1 inline-flex text-[0.74rem] font-semibold text-lime"
-                            >
+                            <Link href="/" className="mt-1 inline-flex text-[0.74rem] font-semibold text-lime">
                               Open today&apos;s full session →
                             </Link>
                           ) : null}
@@ -181,8 +210,8 @@ export default async function PlanPage() {
             <p className="eyebrow">Peak week rules</p>
             <ul className="mt-3 space-y-2.5 text-[0.82rem] leading-snug text-sand">
               <li>
-                <span className="font-semibold text-cream">T-7 to T-4:</span> last real strength and jump stimulus. This
-                is where the adaptation happens.
+                <span className="font-semibold text-cream">T-7 to T-4:</span> last real strength and jump stimulus.
+                This is where the adaptation happens.
               </li>
               <li>
                 <span className="font-semibold text-cream">T-3 to T-2:</span> sharpen only. Short, fast, sub-maximal.
@@ -221,9 +250,9 @@ export default async function PlanPage() {
             <section className="panel border-flame/30 bg-flame/[0.06] p-5">
               <p className="eyebrow text-flame-2">Peak target</p>
               <p className="mt-2 text-[0.86rem] leading-relaxed text-sand">
-                {prettyDate(profile.gameDate ?? today)} is your performance target. By then, jump volume has been cut
-                for {Math.min(2, span)} days, skill touch is high, and the last heavy session is at least 72 hours in
-                the past.
+                {prettyDate(athlete.gameDate ?? today)} is your performance target. By then, jump volume has been
+                cut for {Math.min(2, span)} days, skill touch is high, and the last heavy session is at least 72
+                hours in the past.
               </p>
             </section>
           ) : null}

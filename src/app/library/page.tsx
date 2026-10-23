@@ -1,15 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import { DrillLibrary } from "@/components/DrillLibrary";
 import { Badge, SectionHeading } from "@/components/ui";
-import { getAthleteRow, toProfile } from "@/lib/athlete";
-import { DRILLS } from "@/lib/exercises";
-import { LIBRARY_FILTERS } from "@/lib/exercises";
+import { useStore } from "@/lib/store";
+import { DRILLS, LIBRARY_FILTERS } from "@/lib/exercises";
 
-export const dynamic = "force-dynamic";
+export default function LibraryPage() {
+  const { athlete } = useStore();
 
-export default async function LibraryPage() {
-  const athlete = await getAthleteRow();
-  const profile = athlete ? toProfile(athlete) : null;
   const counts = DRILLS.reduce<Record<string, number>>((acc, drill) => {
     acc[drill.category] = (acc[drill.category] ?? 0) + 1;
     return acc;
@@ -27,9 +26,9 @@ export default async function LibraryPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {profile ? (
+          {athlete ? (
             <Badge tone="lime">
-              Filtered for {profile.position === "unsure" ? "your profile" : profile.position}
+              Filterable for {athlete.position === "unsure" ? "your profile" : athlete.position}
             </Badge>
           ) : (
             <Link href="/start" className="btn btn-ghost !py-2 !text-[0.78rem]">
@@ -53,9 +52,9 @@ export default async function LibraryPage() {
       <div className="mt-6">
         <DrillLibrary
           drills={DRILLS}
-          equipment={profile ? profile.equipment : null}
-          injuries={profile ? profile.injuries : []}
-          age={profile?.age}
+          equipment={athlete ? athlete.equipment : null}
+          injuries={athlete ? athlete.injuries : []}
+          age={athlete?.age}
         />
       </div>
 

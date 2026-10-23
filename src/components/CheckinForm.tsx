@@ -1,11 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
-import { saveCheckinAction, type ActionState } from "@/app/actions";
+import { useState } from "react";
+import { saveCheckin } from "@/lib/store";
 import { FEELING_LABELS, SORE_AREAS, type CheckinInput, type Feeling } from "@/lib/types";
-
-const initial: ActionState = { ok: false, message: "" };
 
 const SCALES: {
   name: keyof Pick<CheckinInput, "energy" | "soreness" | "stress" | "hydration">;
@@ -20,22 +17,59 @@ const SCALES: {
   { name: "hydration", label: "Hydration", low: "Dry", high: "Great", hint: "Honest answer, not aspirational" },
 ];
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={pending}>
-      {pending ? "Scoring readiness…" : "Score readiness & build session"}
-    </button>
-  );
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-export function CheckinForm({ existing }: { existing: CheckinInput | null }) {
-  const [state, formAction] = useActionState(saveCheckinAction, initial);
+export function CheckinForm({
+  existing,
+  onDone,
+}: {
+  existing: CheckinInput | null;
+  onDone?: () => void;
+}) {
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, setPending] = useState(false);
   const [sleep, setSleep] = useState(existing?.sleepHours ?? 7.5);
   const [feeling, setFeeling] = useState<Feeling>(existing?.feeling ?? "good");
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    try {
+      const data = new FormData(event.currentTarget);
+      const num = (key: string, fallback: number) => {
+        const value = Number(String(data.get(key) ?? ""));
+        return Number.isFinite(value) ? value : fallback;
+      };
+      const input: CheckinInput = {
+        sleepHours: clamp(num("sleepHours", 7.5), 0, 14),
+        energy: clamp(Math.round(num("energy", 3)), 1, 5),
+        soreness: clamp(Math.round(num("soreness", 2)), 1, 5),
+        stress: clamp(Math.round(num("stress", 2)), 1, 5),
+        hydration: clamp(Math.round(num("hydration", 3)), 1, 5),
+        feeling,
+        soreAreas: data
+          .getAll("soreAreas")
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      };
+      const checkin = saveCheckin(input);
+      setMessage({
+        ok: true,
+        text: `Readiness logged at ${checkin.readiness}/100. Today's session is ready.`,
+      });
+      onDone?.();
+    } catch {
+      setMessage({ ok: false, text: "Create your athlete profile first, then check in." });
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
-    <form action={formAction} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <div className="flex items-center justify-between">
@@ -130,20 +164,22 @@ export function CheckinForm({ existing }: { existing: CheckinInput | null }) {
         </div>
       </div>
 
-      {state.message ? (
+      {message ? (
         <p
           className={`rounded-xl border px-4 py-3 text-sm ${
-            state.ok ? "border-lime/40 bg-lime/10 text-lime" : "border-flame/40 bg-flame/10 text-flame-2"
+            message.ok ? "border-lime/40 bg-lime/10 text-lime" : "border-flame/40 bg-flame/10 text-flame-2"
           }`}
         >
-          {state.message}
+          {message.text}
         </p>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <SubmitButton />
+        <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={pending}>
+          {pending ? "Scoring readiness…" : "Score readiness & build session"}
+        </button>
         <p className="text-[0.72rem] text-muted">
-          Today's plan is recalculated instantly. Re-submit any time your body changes.
+          Today&apos;s plan is recalculated instantly. Re-submit any time your body changes.
         </p>
       </div>
     </form>

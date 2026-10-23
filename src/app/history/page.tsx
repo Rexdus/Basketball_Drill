@@ -1,26 +1,31 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { Badge, IntensityBadge, LoadChart, SectionHeading, Stat, TrendLine } from "@/components/ui";
-import {
-  getAthleteRow,
-  getRecentCheckins,
-  getRecentWorkouts,
-  streakFrom,
-  toProfile,
-} from "@/lib/athlete";
+import { Badge, EmptyState, IntensityBadge, LoadChart, Stat, TrendLine } from "@/components/ui";
+import { streakOf, useStore } from "@/lib/store";
 import { addDays, prettyDate, todayISO, weekdayShort } from "@/lib/engine";
 
-export const dynamic = "force-dynamic";
+export default function HistoryPage() {
+  const { athlete, checkins, workouts } = useStore();
 
-export default async function HistoryPage() {
-  const athlete = await getAthleteRow();
-  if (!athlete) redirect("/start");
-  const profile = toProfile(athlete);
-  const [workouts, checkins] = await Promise.all([
-    getRecentWorkouts(athlete.id, 30),
-    getRecentCheckins(athlete.id, 21),
-  ]);
+  if (!athlete) {
+    return (
+      <main className="mx-auto max-w-6xl px-5 pb-12 pt-8 sm:px-8">
+        <EmptyState
+          title="No athlete profile yet"
+          body="Create your athlete file, then log sessions to build your training history."
+          action={
+            <Link href="/start" className="btn btn-primary">
+              Build my plan
+            </Link>
+          }
+        />
+      </main>
+    );
+  }
 
+  const sortedWorkouts = [...workouts].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 30);
+  const sortedCheckins = [...checkins].sort((a, b) => (a.date < b.date ? -1 : 1));
   const completed = workouts.filter((row) => row.status === "completed");
   const skipped = workouts.filter((row) => row.status === "skipped");
   const totalMinutes = completed.reduce((acc, row) => acc + row.durationMin, 0);
@@ -30,23 +35,22 @@ export default async function HistoryPage() {
   const avgReadiness = checkins.length
     ? Math.round(checkins.reduce((acc, row) => acc + row.readiness, 0) / checkins.length)
     : 0;
-  const streak = streakFrom(workouts);
+  const streak = streakOf(workouts);
   const today = todayISO();
 
-  const chart = [...workouts]
+  const chart = sortedWorkouts
+    .filter((row) => row.date >= addDays(today, -13))
     .reverse()
-    .filter((row) => row.planDate >= addDays(today, -13))
     .map((row) => ({
-      label: weekdayShort(row.planDate),
+      label: weekdayShort(row.date),
       value: row.loadScore,
       completed: row.status === "completed",
-      today: row.planDate === today,
+      today: row.date === today,
     }));
 
-  const trend = [...checkins].reverse();
   const last21 = Array.from({ length: 21 }, (_, index) => {
     const date = addDays(today, index - 20);
-    const row = workouts.find((workout) => workout.planDate === date);
+    const row = workouts.find((workout) => workout.date === date);
     return { date, row };
   });
 
@@ -57,8 +61,8 @@ export default async function HistoryPage() {
           <p className="eyebrow">Training log</p>
           <h1 className="display mt-2 text-[clamp(2.1rem,5vw,3.1rem)]">Receipts, not resolutions.</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
-            Every completed session, readiness score and RPE you log feeds tomorrow&apos;s prescription. Consistency is
-            the variable that actually moves your game.
+            Every completed session, readiness score and RPE you log feeds tomorrow&apos;s prescription. Consistency
+            is the variable that actually moves your game.
           </p>
         </div>
         <Link href="/" className="btn btn-primary">
@@ -76,8 +80,13 @@ export default async function HistoryPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         <div className="space-y-4">
           <section className="panel p-5">
-            <SectionHeading eyebrow="Session history" title="Recent sessions" />
-            {workouts.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="eyebrow">Session history</p>
+                <h2 className="mt-1 text-lg font-bold tracking-tight text-cream">Recent sessions</h2>
+              </div>
+            </div>
+            {sortedWorkouts.length === 0 ? (
               <div className="mt-4 rounded-xl border border-line bg-ink-2/60 p-5">
                 <p className="text-sm text-muted">
                   Nothing logged yet. Generate today&apos;s session and mark it complete to start your log.
@@ -88,7 +97,7 @@ export default async function HistoryPage() {
               </div>
             ) : (
               <ul className="mt-4 divide-y divide-line-soft">
-                {workouts.map((row) => (
+                {sortedWorkouts.map((row) => (
                   <li key={row.id} className="py-3.5 first:pt-0">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -103,7 +112,7 @@ export default async function HistoryPage() {
                           )}
                         </div>
                         <p className="mt-1 text-[0.74rem] text-muted">
-                          {prettyDate(row.planDate)} · {row.phase} · {row.durationMin} min · load {row.loadScore} ·
+                          {prettyDate(row.date)} · {row.phase} · {row.durationMin} min · load {row.loadScore} ·
                           readiness {row.readinessScore}
                         </p>
                         {row.feedback ? (
@@ -112,7 +121,7 @@ export default async function HistoryPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {row.rpe ? <Badge tone="outline">RPE {row.rpe}</Badge> : null}
-                        <IntensityBadge intensity={row.intensity as "restore" | "maintain" | "build" | "peak"} />
+                        <IntensityBadge intensity={row.intensity} />
                       </div>
                     </div>
                     <details className="mt-2">
@@ -127,7 +136,9 @@ export default async function HistoryPage() {
                               <span className="text-[0.66rem] text-muted">{block.durationMin}m</span>
                             </div>
                             <p className="mt-0.5 text-[0.72rem] leading-snug text-muted">
-                              {block.exercises.map((exercise) => `${exercise.name} (${exercise.dose})`).join(" · ")}
+                              {block.exercises
+                                .map((exercise) => `${exercise.name} (${exercise.dose})`)
+                                .join(" · ")}
                             </p>
                           </div>
                         ))}
@@ -153,14 +164,17 @@ export default async function HistoryPage() {
             <div className="mt-4 border-t border-line-soft pt-3">
               <p className="eyebrow">Readiness trend</p>
               <div className="mt-2">
-                {trend.length > 1 ? (
+                {sortedCheckins.length > 1 ? (
                   <>
                     <TrendLine
-                      points={trend.map((row) => row.readiness)}
-                      labels={[trend[0].checkinDate.slice(5), trend[trend.length - 1].checkinDate.slice(5)]}
+                      points={sortedCheckins.map((row) => row.readiness)}
+                      labels={[
+                        sortedCheckins[0].date.slice(5),
+                        sortedCheckins[sortedCheckins.length - 1].date.slice(5),
+                      ]}
                     />
                     <p className="mt-1 text-[0.72rem] text-muted">
-                      Average {avgReadiness}/100 · {trend.length} check-ins
+                      Average {avgReadiness}/100 · {sortedCheckins.length} check-ins
                     </p>
                   </>
                 ) : (
@@ -210,7 +224,7 @@ export default async function HistoryPage() {
             <div className="mt-2 space-y-2 text-[0.82rem] text-sand">
               <p>
                 <span className="font-semibold text-cream">{completed.length}</span> sessions completed by{" "}
-                {profile.name.split(" ")[0]}.
+                {athlete.name.split(" ")[0]}.
               </p>
               <p className="text-muted">
                 {completed.length >= 12

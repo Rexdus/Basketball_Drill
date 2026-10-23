@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useStore } from "@/lib/store";
 import { Logo } from "./ui";
 
 const LINKS = [
@@ -12,8 +13,18 @@ const LINKS = [
   { href: "/profile", label: "Profile" },
 ];
 
-export function SiteHeader({ athleteName }: { athleteName: string | null }) {
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+export function SiteHeader() {
   const pathname = usePathname();
+  const { athlete } = useStore();
+  const athleteName = athlete?.name ?? null;
+
+  // usePathname may include the configured basePath on static hosts; strip it
+  // so active-link detection works everywhere.
+  const barePath =
+    BASE_PATH && pathname.startsWith(BASE_PATH) ? pathname.slice(BASE_PATH.length) || "/" : pathname;
+
   return (
     <header className="sticky top-0 z-40 border-b border-line-soft bg-ink/85 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3 sm:px-8">
@@ -31,7 +42,7 @@ export function SiteHeader({ athleteName }: { athleteName: string | null }) {
 
         <nav className="order-3 -mx-1 flex w-full items-center gap-1 overflow-x-auto pb-0.5 sm:order-2 sm:mx-0 sm:w-auto sm:flex-1 sm:overflow-visible">
           {LINKS.map((link) => {
-            const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+            const active = link.href === "/" ? barePath === "/" : barePath.startsWith(link.href);
             return (
               <Link
                 key={link.href}

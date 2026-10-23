@@ -1,18 +1,26 @@
+"use client";
+
 import Link from "next/link";
-import { rebuildTodayAction } from "@/app/actions";
+import { useEffect } from "react";
 import { CheckinForm } from "@/components/CheckinForm";
 import { Landing } from "@/components/Landing";
 import { WorkoutView } from "@/components/WorkoutView";
-import { Badge, IntensityBadge, LoadChart, ReadinessRing, SectionHeading, Stat, TrendLine } from "@/components/ui";
 import {
-  completedThisWeek,
-  checkinToInput,
-  generateTodayWorkout,
-  getRecentCheckins,
-  getRecentWorkouts,
-  getTodayContext,
-  streakFrom,
-} from "@/lib/athlete";
+  Badge,
+  IntensityBadge,
+  LoadChart,
+  ReadinessRing,
+  Stat,
+  TrendLine,
+} from "@/components/ui";
+import {
+  ensureTodayWorkout,
+  readinessForDate,
+  regenerateToday,
+  streakOf,
+  useStore,
+  type StoredCheckin,
+} from "@/lib/store";
 import {
   bmiCategory,
   buildPlanPreview,
@@ -21,52 +29,84 @@ import {
   todayISO,
   weekdayShort,
 } from "@/lib/engine";
-import { EQUIPMENT_LABELS, GOAL_LABELS, POSITION_LABELS } from "@/lib/types";
+import { EQUIPMENT_LABELS, GOAL_LABELS, POSITION_LABELS, type CheckinInput } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
+function checkinToInput(checkin: StoredCheckin | null): CheckinInput | null {
+  if (!checkin) return null;
+  return {
+    sleepHours: checkin.sleepHours,
+    energy: checkin.energy,
+    soreness: checkin.soreness,
+    stress: checkin.stress,
+    hydration: checkin.hydration,
+    feeling: checkin.feeling,
+    soreAreas: checkin.soreAreas ?? [],
+    notes: checkin.notes,
+  };
+}
 
-export default async function HomePage() {
-  const ctx = await getTodayContext();
-  if (!ctx) return <Landing />;
-
-  const { athlete, profile, checkin, readiness, days } = ctx;
+export default function HomePage() {
+  const { athlete, checkins, workouts } = useStore();
   const today = todayISO();
-  const workout = ctx.workout ?? (await generateTodayWorkout(athlete));
 
-  const [recentWorkouts, recentCheckins, weekWorkouts] = await Promise.all([
-    getRecentWorkouts(athlete.id, 14),
-    getRecentCheckins(athlete.id, 10),
-    completedThisWeek(athlete.id),
-  ]);
+  // Make sure a session exists for today (generated from profile + check-in).
+  useEffect(() => {
+    if (athlete) ensureTodayWorkout(athlete);
+  }, [athlete]);
 
-  const plan = buildPlanPreview(profile, readiness);
+  // No athlete in this browser → the marketing landing page. This also renders
+  // during prerender, so the static export ships real content without JS.
+  if (!athlete) return <Landing />;
+
+  const todayCheckin = checkins.find((row) => row.date === today) ?? null;
+  const readiness = readinessForDate(checkins, today);
+  const days = athlete.gameDate
+    ? Math.round(
+        (new Date(`${athlete.gameDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) /
+          86_400_000,
+      )
+    : null;
+  const todayWorkout = workouts.find((row) => row.date === today) ?? null;
+
+  const recentWorkouts = [...workouts].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 14);
+  const weekWorkouts = workouts.filter((row) => {
+    if (row.status !== "completed") return false;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    const cutoffISO = `${cutoff.getFullYear()}-${`${cutoff.getMonth() + 1}`.padStart(2, "0")}-${`${cutoff.getDate()}`.padStart(2, "0")}`;
+    return row.date >= cutoffISO;
+  });
+
+  const plan = buildPlanPreview(athlete, readiness);
   const upcoming = plan.slice(0, Math.min(5, plan.length));
-  const streak = streakFrom(recentWorkouts);
+  const streak = streakOf(workouts);
   const weekMinutes = weekWorkouts.reduce((acc, row) => acc + row.durationMin, 0);
-  const latestCheckinInput = checkinToInput(checkin);
+  const latestCheckinInput = checkinToInput(todayCheckin);
 
   const chart = [...recentWorkouts]
     .reverse()
     .slice(-10)
     .map((row) => ({
-      label: weekdayShort(row.planDate),
+      label: weekdayShort(row.date),
       value: row.loadScore,
       completed: row.status === "completed",
-      today: row.planDate === today,
+      today: row.date === today,
     }));
 
-  const readinessTrend = [...recentCheckins]
-    .reverse()
-    .map((row) => row.readiness || 70);
+  const readinessTrend = [...checkins]
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .map((row) => row.readiness);
+
+  const loggedWorkouts = recentWorkouts.filter((row) => row.status !== "planned");
 
   const coachNote =
     days === 0
       ? "It's game day. Keep this short, keep it sharp, and finish feeling better than you started."
-      : weekWorkouts.length >= profile.daysPerWeek
+      : weekWorkouts.length >= athlete.daysPerWeek
         ? `${weekWorkouts.length} sessions logged this week — that's your target hit. Protect sleep and let the adaptation happen.`
         : weekWorkouts.length === 0
-          ? `No sessions logged this week yet. One focused ${profile.minutes}-minute session today resets the whole week.`
-          : `${weekWorkouts.length} of ${profile.daysPerWeek} sessions logged this week. ${
+          ? `No sessions logged this week yet. One focused ${athlete.minutes}-minute session today resets the whole week.`
+          : `${weekWorkouts.length} of ${athlete.daysPerWeek} sessions logged this week. ${
               readiness >= 70
                 ? "You're recovered enough to push the main block hard today."
                 : "Keep today controlled and bank the consistency instead of chasing fatigue."
@@ -80,7 +120,7 @@ export default async function HomePage() {
             {prettyDate(today)} · {gameCountdownLabel(days)}
           </p>
           <h1 className="display mt-2 text-[clamp(2.1rem,5vw,3.1rem)]">
-            {profile.name.split(" ")[0]}, let's get you ready.
+            {athlete.name.split(" ")[0]}, let&apos;s get you ready.
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
             {days === 0
@@ -91,13 +131,15 @@ export default async function HomePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="outline">{GOAL_LABELS[profile.goal]}</Badge>
-          <Badge tone="outline">{POSITION_LABELS[profile.position]}</Badge>
-          <form action={rebuildTodayAction}>
-            <button type="submit" className="btn btn-ghost !py-2 !text-[0.78rem]">
-              Rebuild session
-            </button>
-          </form>
+          <Badge tone="outline">{GOAL_LABELS[athlete.goal]}</Badge>
+          <Badge tone="outline">{POSITION_LABELS[athlete.position]}</Badge>
+          <button
+            type="button"
+            className="btn btn-ghost !py-2 !text-[0.78rem]"
+            onClick={() => regenerateToday(athlete)}
+          >
+            Rebuild session
+          </button>
         </div>
       </div>
 
@@ -107,10 +149,10 @@ export default async function HomePage() {
           <div>
             <p className="eyebrow">Readiness</p>
             <p className="mt-1 text-sm font-semibold text-cream">
-              {checkin ? "Check-in logged" : "Baseline estimate"}
+              {todayCheckin ? "Check-in logged" : "Baseline estimate"}
             </p>
             <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-              {checkin ? "Recalculated from today's signals" : "Log a check-in for a real score"}
+              {todayCheckin ? "Recalculated from today's signals" : "Log a check-in for a real score"}
             </p>
           </div>
         </div>
@@ -122,7 +164,7 @@ export default async function HomePage() {
         />
         <Stat
           label="This week"
-          value={`${weekWorkouts.length}/${profile.daysPerWeek}`}
+          value={`${weekWorkouts.length}/${athlete.daysPerWeek}`}
           hint={`${weekMinutes} min trained in the last 7 days`}
         />
         <Stat label="Current streak" value={`${streak}d`} hint={streak > 0 ? "Keep the chain alive" : "Log today to start"} />
@@ -135,21 +177,21 @@ export default async function HomePage() {
               <div>
                 <p className="eyebrow">Morning check-in</p>
                 <h2 className="mt-1.5 text-xl font-bold tracking-tight">
-                  {checkin ? "Today's signals" : "How are you feeling today?"}
+                  {todayCheckin ? "Today's signals" : "How are you feeling today?"}
                 </h2>
               </div>
-              {checkin ? <Badge tone="lime">Scored {readiness}/100</Badge> : <Badge tone="flame">2 min</Badge>}
+              {todayCheckin ? <Badge tone="lime">Scored {readiness}/100</Badge> : <Badge tone="flame">2 min</Badge>}
             </div>
 
-            {checkin ? (
+            {todayCheckin ? (
               <div className="mt-4">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   {[
-                    { label: "Sleep", value: `${checkin.sleepHours} h` },
-                    { label: "Energy", value: `${checkin.energy}/5` },
-                    { label: "Soreness", value: `${checkin.soreness}/5` },
-                    { label: "Stress", value: `${checkin.stress}/5` },
-                    { label: "Water", value: `${checkin.hydration}/5` },
+                    { label: "Sleep", value: `${todayCheckin.sleepHours} h` },
+                    { label: "Energy", value: `${todayCheckin.energy}/5` },
+                    { label: "Soreness", value: `${todayCheckin.soreness}/5` },
+                    { label: "Stress", value: `${todayCheckin.stress}/5` },
+                    { label: "Water", value: `${todayCheckin.hydration}/5` },
                   ].map((signal) => (
                     <div key={signal.label} className="panel-flat px-3 py-2.5">
                       <p className="text-[0.62rem] uppercase tracking-[0.14em] text-muted">{signal.label}</p>
@@ -158,8 +200,10 @@ export default async function HomePage() {
                   ))}
                 </div>
                 <p className="mt-3 text-[0.8rem] text-muted">
-                  Feeling: <span className="text-sand">{checkin.feeling}</span>
-                  {checkin.soreAreas.length > 0 ? ` · Sore: ${checkin.soreAreas.join(", ")}` : " · No sore spots flagged"}
+                  Feeling: <span className="text-sand">{todayCheckin.feeling}</span>
+                  {todayCheckin.soreAreas.length > 0
+                    ? ` · Sore: ${todayCheckin.soreAreas.join(", ")}`
+                    : " · No sore spots flagged"}
                 </p>
                 <details className="mt-3">
                   <summary className="cursor-pointer text-[0.78rem] font-semibold text-flame-2">
@@ -173,7 +217,7 @@ export default async function HomePage() {
             ) : (
               <div className="mt-4">
                 <p className="text-[0.85rem] leading-relaxed text-muted">
-                  Five honest signals decide today's intensity, jump volume and conditioning dose. It takes about two
+                  Five honest signals decide today&apos;s intensity, jump volume and conditioning dose. It takes about two
                   minutes and completely changes the prescription.
                 </p>
                 <div className="mt-4">
@@ -183,17 +227,19 @@ export default async function HomePage() {
             )}
           </section>
 
-          {workout ? (
-            <WorkoutView plan={workout.plan} workout={workout} bodyWeightKg={profile.weightKg} />
+          {todayWorkout ? (
+            <WorkoutView plan={todayWorkout.plan} workout={todayWorkout} bodyWeightKg={athlete.weightKg} />
           ) : (
             <section className="panel p-6">
               <h2 className="text-lg font-semibold">No session yet</h2>
-              <p className="mt-1 text-sm text-muted">Rebuild to generate today's prescription.</p>
-              <form action={rebuildTodayAction} className="mt-3">
-                <button type="submit" className="btn btn-primary">
-                  Build today's session
-                </button>
-              </form>
+              <p className="mt-1 text-sm text-muted">Rebuild to generate today&apos;s prescription.</p>
+              <button
+                type="button"
+                className="btn btn-primary mt-3"
+                onClick={() => ensureTodayWorkout(athlete)}
+              >
+                Build today&apos;s session
+              </button>
             </section>
           )}
         </div>
@@ -265,14 +311,17 @@ export default async function HomePage() {
             <p className="mt-2 text-[0.84rem] leading-relaxed text-sand">{coachNote}</p>
             <div className="hairline my-4" />
             <div className="flex flex-wrap gap-2">
-              <Badge tone="outline">{profile.heightCm} cm</Badge>
-              <Badge tone="outline">{profile.weightKg} kg</Badge>
-              <Badge tone="outline">{bmiCategory(profile)}</Badge>
-              <Badge tone="outline">{profile.minutes} min sessions</Badge>
+              <Badge tone="outline">{athlete.heightCm} cm</Badge>
+              <Badge tone="outline">{athlete.weightKg} kg</Badge>
+              <Badge tone="outline">{bmiCategory(athlete)}</Badge>
+              <Badge tone="outline">{athlete.minutes} min sessions</Badge>
             </div>
             <p className="mt-3 text-[0.72rem] leading-snug text-muted">
-              Gear: {profile.equipment.length ? profile.equipment.map((e) => EQUIPMENT_LABELS[e]).join(", ") : "Bodyweight only"}
-              {profile.injuries.length ? ` · Managing: ${profile.injuries.join(", ")}` : ""}
+              Gear:{" "}
+              {athlete.equipment.length
+                ? athlete.equipment.map((e) => EQUIPMENT_LABELS[e]).join(", ")
+                : "Bodyweight only"}
+              {athlete.injuries.length ? ` · Managing: ${athlete.injuries.join(", ")}` : ""}
             </p>
             <Link href="/profile" className="mt-3 inline-flex text-[0.78rem] font-semibold text-flame-2">
               Edit athlete profile →
@@ -280,28 +329,25 @@ export default async function HomePage() {
           </section>
 
           <section className="panel p-5">
-            <SectionHeading eyebrow="Recent log" title="What you've done" />
+            <p className="eyebrow">Recent log</p>
             <div className="mt-3 space-y-2">
-              {recentWorkouts
-                .filter((row) => row.status !== "planned")
-                .slice(0, 4)
-                .map((row) => (
-                  <div key={row.id} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[0.8rem] text-cream">{row.title}</p>
-                      <p className="text-[0.68rem] text-muted">
-                        {weekdayShort(row.planDate)} · {row.durationMin} min
-                        {row.rpe ? ` · RPE ${row.rpe}` : ""}
-                      </p>
-                    </div>
-                    {row.status === "completed" ? (
-                      <IntensityBadge intensity={row.intensity === "peak" ? "peak" : "maintain"} />
-                    ) : (
-                      <Badge tone="outline">Skipped</Badge>
-                    )}
+              {loggedWorkouts.slice(0, 4).map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[0.8rem] text-cream">{row.title}</p>
+                    <p className="text-[0.68rem] text-muted">
+                      {weekdayShort(row.date)} · {row.durationMin} min
+                      {row.rpe ? ` · RPE ${row.rpe}` : ""}
+                    </p>
                   </div>
-                ))}
-              {recentWorkouts.filter((row) => row.status !== "planned").length === 0 ? (
+                  {row.status === "completed" ? (
+                    <IntensityBadge intensity={row.intensity === "peak" ? "peak" : "maintain"} />
+                  ) : (
+                    <Badge tone="outline">Skipped</Badge>
+                  )}
+                </div>
+              ))}
+              {loggedWorkouts.length === 0 ? (
                 <p className="text-[0.78rem] text-muted">Nothing logged yet — today can be day one.</p>
               ) : null}
             </div>
@@ -310,8 +356,8 @@ export default async function HomePage() {
       </div>
 
       <p className="mt-8 text-center text-[0.72rem] text-muted">
-        Session adapted to {profile.name} · {POSITION_LABELS[profile.position]} · {profile.experience} ·{" "}
-        {GOAL_LABELS[profile.goal]}
+        Session adapted to {athlete.name} · {POSITION_LABELS[athlete.position]} · {athlete.experience} ·{" "}
+        {GOAL_LABELS[athlete.goal]}
       </p>
     </main>
   );

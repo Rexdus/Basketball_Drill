@@ -1,7 +1,11 @@
+"use client";
+
+import Image from "next/image";
 import Link from "next/link";
-import { demoAthleteAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
 import { buildWorkout, todayISO } from "@/lib/engine";
 import { DRILLS } from "@/lib/exercises";
+import { createDemoAthlete } from "@/lib/store";
 import type { AthleteProfile } from "@/lib/types";
 import { Badge, SectionHeading } from "./ui";
 
@@ -54,6 +58,7 @@ const PILLARS = [
 ];
 
 export function Landing() {
+  const router = useRouter();
   const sample = buildWorkout({
     profile: SAMPLE_PROFILE,
     checkin: null,
@@ -65,10 +70,16 @@ export function Landing() {
   return (
     <main>
       <section className="relative isolate overflow-hidden border-b border-line-soft">
-        <div
-          className="absolute inset-0 -z-20 bg-cover bg-[position:62%_center] opacity-60"
-          style={{ backgroundImage: "url('/images/hero-court.jpg')" }}
-        />
+        <div className="absolute inset-0 -z-20">
+          <Image
+            src="/images/hero-court.jpg"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-[62%_center] opacity-60"
+          />
+        </div>
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/90 to-ink/35" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-transparent to-ink/60" />
 
@@ -97,16 +108,21 @@ export function Landing() {
                 Build my free plan
                 <span aria-hidden>→</span>
               </Link>
-              <form action={demoAthleteAction}>
-                <button type="submit" className="btn btn-ghost !px-5 !py-3 !text-sm">
-                  Explore a demo athlete
-                </button>
-              </form>
+              <button
+                type="button"
+                className="btn btn-ghost !px-5 !py-3 !text-sm"
+                onClick={() => {
+                  createDemoAthlete();
+                  router.push("/");
+                }}
+              >
+                Explore a demo athlete
+              </button>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[0.74rem] text-muted">
               <span>✓ No sign-up, no card</span>
               <span>✓ Works with a ball and a court</span>
-              <span>✓ Built for rec, school &amp; pro-am players</span>
+              <span>✓ Runs 100% in your browser</span>
             </div>
           </div>
 
@@ -207,15 +223,15 @@ export function Landing() {
           <div className="max-w-2xl">
             <p className="eyebrow">Your move</p>
             <h2 className="display mt-3 text-[clamp(1.9rem,4vw,2.8rem)]">
-              Tomorrow's legs are built today.
+              Tomorrow&apos;s legs are built today.
             </h2>
             <p className="mt-3 text-[0.92rem] leading-relaxed text-sand">
-              Tell CourtReady how you're feeling and what's on the calendar. You'll have a complete, equipment-honest
+              Tell CourtReady how you&apos;re feeling and what&apos;s on the calendar. You&apos;ll have a complete, equipment-honest
               session in seconds — and a week that knows when your game is.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/start" className="btn btn-lime !px-5 !py-3 !text-sm">
-                Generate today's workout
+                Generate today&apos;s workout
               </Link>
               <Link href="/library" className="btn btn-ghost !px-5 !py-3 !text-sm">
                 Browse the drill library

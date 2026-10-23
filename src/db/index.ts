@@ -1,11 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
-}
+// The database is only used by the server build (the /api/health check).
+// The static export for GitHub Pages never imports this module, but we still
+// avoid throwing at import time so a missing DATABASE_URL can never break a
+// build — it only fails if a query is actually attempted.
+const databaseUrl = process.env.DATABASE_URL ?? "";
 
 const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;

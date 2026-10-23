@@ -1,18 +1,19 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { ProfileForm } from "@/components/ProfileForm";
 import { Badge, Logo } from "@/components/ui";
-import { getAthleteRow } from "@/lib/athlete";
+import { useStore } from "@/lib/store";
 
-export const dynamic = "force-dynamic";
+export default function StartPage() {
+  const { athlete } = useStore();
+  const router = useRouter();
 
-export const metadata = {
-  title: "Build your plan · CourtReady",
-};
-
-export default async function StartPage() {
-  const existing = await getAthleteRow();
-  if (existing) redirect("/");
+  useEffect(() => {
+    if (athlete) router.replace("/");
+  }, [athlete, router]);
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-8 sm:px-8">
@@ -32,10 +33,11 @@ export default async function StartPage() {
           </h1>
           <p className="mt-3 max-w-2xl text-[0.92rem] leading-relaxed text-sand">
             These details size every session: age and body mass cap impact, position shifts the emphasis, equipment
-            filters the drill pool, and your game date drives the taper. You can change anything later.
+            filters the drill pool, and your game date drives the taper. You can change anything later. Everything is
+            stored only in this browser.
           </p>
           <div className="mt-7">
-            <ProfileForm mode="create" />
+            <ProfileForm mode="create" onSaved={() => router.push("/")} />
           </div>
         </div>
 
@@ -68,8 +70,7 @@ export default async function StartPage() {
           </section>
 
           <p className="px-1 text-[0.72rem] leading-snug text-muted">
-            CourtReady stores your profile in this app to personalise sessions. It is training guidance, not medical
-            advice.
+            CourtReady stores your profile in this browser only. It is training guidance, not medical advice.
           </p>
         </aside>
       </div>

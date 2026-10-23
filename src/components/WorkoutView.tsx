@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import type { Workout } from "@/db/schema";
+import { useState } from "react";
+import type { StoredWorkout } from "@/lib/store";
+import { completeWorkout, skipWorkout } from "@/lib/store";
 import type { WorkoutPlan } from "@/lib/types";
-import { completeWorkoutAction, skipWorkoutAction } from "@/app/actions";
 import { Badge, IntensityBadge, Meter } from "./ui";
 
 const TYPE_ICON: Record<string, string> = {
@@ -25,10 +28,12 @@ export function WorkoutView({
   bodyWeightKg = 75,
 }: {
   plan: WorkoutPlan;
-  workout?: Workout | null;
+  workout?: StoredWorkout | null;
   showActions?: boolean;
   bodyWeightKg?: number;
 }) {
+  const [rpe, setRpe] = useState(7);
+  const [feedback, setFeedback] = useState("");
   const completed = workout?.status === "completed";
   const skipped = workout?.status === "skipped";
   const proteinPct = Math.round((plan.nutrition.proteinG / (bodyWeightKg * 2.3)) * 100);
@@ -179,13 +184,17 @@ export function WorkoutView({
                   </Link>
                 </div>
               ) : (
-                <form action={completeWorkoutAction} className="rounded-xl border border-line bg-ink-2/80 p-3.5">
-                  <input type="hidden" name="workoutId" value={workout.id} />
+                <div className="rounded-xl border border-line bg-ink-2/80 p-3.5">
                   <p className="eyebrow">Log the work</p>
                   <label className="field-label mt-2.5" htmlFor="rpe">
                     How hard was it? (RPE)
                   </label>
-                  <select id="rpe" name="rpe" className="field" defaultValue="7">
+                  <select
+                    id="rpe"
+                    className="field"
+                    value={rpe}
+                    onChange={(event) => setRpe(Number(event.target.value))}
+                  >
                     {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => (
                       <option key={value} value={value}>
                         {value} ·{" "}
@@ -206,23 +215,28 @@ export function WorkoutView({
                   </label>
                   <textarea
                     id="feedback"
-                    name="feedback"
                     rows={2}
                     className="field"
                     placeholder="Knees felt great, jumps felt springy…"
                     maxLength={300}
+                    value={feedback}
+                    onChange={(event) => setFeedback(event.target.value)}
                   />
-                  <button type="submit" className="btn btn-primary mt-3 w-full">
+                  <button
+                    type="button"
+                    className="btn btn-primary mt-3 w-full"
+                    onClick={() => completeWorkout(workout.id, rpe, feedback)}
+                  >
                     Mark session complete
                   </button>
                   <button
-                    type="submit"
-                    formAction={skipWorkoutAction}
+                    type="button"
                     className="btn btn-ghost mt-2 w-full !text-[0.78rem]"
+                    onClick={() => skipWorkout(workout.id, feedback)}
                   >
                     Rest today instead
                   </button>
-                </form>
+                </div>
               )
             ) : null}
           </aside>

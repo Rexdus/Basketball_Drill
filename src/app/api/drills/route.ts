@@ -1,22 +1,18 @@
 import { DRILLS } from "@/lib/exercises";
-import type { Category, Equipment } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
+// Fully static JSON dump of the drill library. Works in both the server build
+// and the static export used for GitHub Pages.
+export const dynamic = "force-static";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const category = url.searchParams.get("category");
-  const gear = url.searchParams.get("gear");
-  const maxImpact = Number(url.searchParams.get("maxImpact") ?? 3);
-  const query = (url.searchParams.get("q") ?? "").toLowerCase();
+export async function GET() {
+  const counts = DRILLS.reduce<Record<string, number>>((acc, drill) => {
+    acc[drill.category] = (acc[drill.category] ?? 0) + 1;
+    return acc;
+  }, {});
 
-  const drills = DRILLS.filter((drill) => {
-    if (category && category !== "all" && drill.category !== (category as Category)) return false;
-    if (gear && !drill.gear.includes(gear as Equipment)) return false;
-    if (Number.isFinite(maxImpact) && drill.impact > maxImpact) return false;
-    if (query && !`${drill.name} ${drill.cue}`.toLowerCase().includes(query)) return false;
-    return true;
+  return Response.json({
+    count: DRILLS.length,
+    categories: counts,
+    drills: DRILLS,
   });
-
-  return Response.json({ count: drills.length, drills });
 }

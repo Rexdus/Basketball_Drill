@@ -1,8 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
-import { saveProfileAction, type ActionState } from "@/app/actions";
+import { useState } from "react";
+import { saveAthlete, type AthleteInput } from "@/lib/store";
 import {
   EQUIPMENT_LABELS,
   EXPERIENCE_LABELS,
@@ -17,8 +16,6 @@ import {
   type Position,
 } from "@/lib/types";
 
-const initial: ActionState = { ok: false, message: "" };
-
 const EQUIPMENT_ORDER: Equipment[] = [
   "bodyweight",
   "dumbbells",
@@ -31,15 +28,6 @@ const EQUIPMENT_ORDER: Equipment[] = [
   "court",
 ];
 const INJURY_ORDER: Injury[] = ["knee", "ankle", "back", "shoulder", "hamstring"];
-
-function SubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={pending}>
-      {pending ? "Saving…" : label}
-    </button>
-  );
-}
 
 function Segmented<T extends string>({
   name,
@@ -83,19 +71,85 @@ function Segmented<T extends string>({
   );
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseProfileForm(form: HTMLFormElement): AthleteInput {
+  const data = new FormData(form);
+  const text = (key: string) => String(data.get(key) ?? "").trim();
+  const num = (key: string, fallback: number) => {
+    const value = Number(text(key));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  const list = (key: string) =>
+    data
+      .getAll(key)
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+  const gameDateRaw = text("gameDate");
+  return {
+    name: text("name") || "Hooper",
+    age: clamp(Math.round(num("age", 20)), 10, 80),
+    heightCm: clamp(Math.round(num("heightCm", 180)), 120, 230),
+    weightKg: clamp(Math.round(num("weightKg", 75) * 10) / 10, 35, 200),
+    position: (list("position")[0] ?? "unsure") as Position,
+    experience: (list("experience")[0] ?? "intermediate") as Experience,
+    goal: (list("goal")[0] ?? "balanced") as Goal,
+    daysPerWeek: clamp(Math.round(num("daysPerWeek", 4)), 1, 7),
+    minutes: clamp(Math.round(num("minutes", 55) / 5) * 5, 20, 120),
+    gameDate: /^\d{4}-\d{2}-\d{2}$/.test(gameDateRaw) ? gameDateRaw : null,
+    equipment: list("equipment").filter((e): e is Equipment =>
+      (EQUIPMENT_ORDER as string[]).includes(e),
+    ),
+    injuries: list("injuries").filter((i): i is Injury => (INJURY_ORDER as string[]).includes(i)),
+    notes: text("notes") || null,
+  };
+}
+
 export function ProfileForm({
   profile,
   mode = "create",
+  onSaved,
 }: {
   profile?: AthleteProfile | null;
   mode?: "create" | "edit";
+  onSaved?: () => void;
 }) {
-  const [state, formAction] = useActionState(saveProfileAction, initial);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, setPending] = useState(false);
   const [minutes, setMinutes] = useState(profile?.minutes ?? 55);
   const [days, setDays] = useState(profile?.daysPerWeek ?? 4);
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    try {
+      const input = parseProfileForm(event.currentTarget);
+      if (!input.heightCm || !input.weightKg) {
+        setMessage({ ok: false, text: "Add a valid height and weight so we can size your sessions." });
+        return;
+      }
+      saveAthlete(input);
+      setMessage({
+        ok: true,
+        text:
+          mode === "edit"
+            ? "Profile saved. Today's session has been rebuilt around the new details."
+            : "Profile saved — generating your plan.",
+      });
+      onSaved?.();
+    } catch {
+      setMessage({ ok: false, text: "Something went wrong saving your profile. Try again." });
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="panel p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -312,7 +366,7 @@ export function ProfileForm({
             ))}
           </div>
           <p className="mt-2 text-[0.7rem] text-muted">
-            Nothing selected? Great — we'll still cap high-impact work by age and body mass.
+            Nothing selected? Great — we&apos;ll still cap high-impact work by age and body mass.
           </p>
         </fieldset>
 
@@ -332,20 +386,22 @@ export function ProfileForm({
         </div>
       </div>
 
-      {state.message ? (
+      {message ? (
         <p
           className={`rounded-xl border px-4 py-3 text-sm ${
-            state.ok
+            message.ok
               ? "border-lime/40 bg-lime/10 text-lime"
               : "border-flame/40 bg-flame/10 text-flame-2"
           }`}
         >
-          {state.message}
+          {message.text}
         </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton label={mode === "edit" ? "Save & rebuild today's session" : "Generate my plan"} />
+        <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={pending}>
+          {pending ? "Saving…" : mode === "edit" ? "Save & rebuild today's session" : "Generate my plan"}
+        </button>
         <p className="text-[0.72rem] text-muted">
           {mode === "edit"
             ? "Saving rebuilds today's session with your new data."
