@@ -6,11 +6,11 @@ CourtReady is a **fully static, client-side app**. There is no server, no databa
 
 ## Features
 
-- **Athlete profile** — age, height, weight, position, experience, goal, session length, training days, equipment and injury flags, with a **metric / imperial** unit toggle (cm/kg ↔ ft+in/lb with live conversion; everything is stored canonically in metric for the engine).
+- **Athlete profile** — age, height, weight, position, experience, goal, session length, weekly individual-workout target, recurring practice/game weekdays, equipment and injury flags, with a **metric / imperial** unit toggle (cm/kg ↔ ft+in/lb with live conversion; everything is stored canonically in metric for the engine). Recurring court commitments reserve those days from extra training sessions.
 - **Daily readiness check-in** — sleep, energy, soreness, life stress, hydration and overall feeling become a 0–100 readiness score that drives intensity, impact caps and volume.
 - **Engine-generated daily session** — warm-up, jump/landing, strength, power, speed, conditioning, skill and cool-down blocks with sets, reps, loads, rest and coaching cues, plus "why this session", safety adjustments and fuel targets.
 - **Game-day periodization** — set your next game and the runway shifts develop → build → sharpen → taper → game-day primer, with a load-shape chart and game-day fuelling timeline.
-- **Training log** — session history, load bars, readiness trend, consistency grid, streak and totals.
+- **Training log** — session history, load bars, readiness trend, consistency grid, streak and totals. Log team practices, pickup runs and games with duration and effort (RPE); recent court workload informs readiness and today's prescription.
 - **Drill library** — 120+ basketball-specific drills with cues, dose progressions, equipment requirements, impact levels and injury cautions, filterable to your exact setup.
 - **Data portability** — export/import your full training history as JSON from the profile page.
 

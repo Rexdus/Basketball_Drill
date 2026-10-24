@@ -17,6 +17,7 @@ import {
   ensureTodayWorkout,
   readinessForDate,
   regenerateToday,
+  recentHardLoad,
   streakOf,
   useStore,
   type StoredCheckin,
@@ -47,7 +48,7 @@ function checkinToInput(checkin: StoredCheckin | null): CheckinInput | null {
 }
 
 export default function HomePage() {
-  const { athlete, checkins, workouts } = useStore();
+  const { athlete, checkins, workouts, activities } = useStore();
   const today = todayISO();
 
   // Make sure a session exists for today (generated from profile + check-in).
@@ -60,7 +61,7 @@ export default function HomePage() {
   if (!athlete) return <Landing />;
 
   const todayCheckin = checkins.find((row) => row.date === today) ?? null;
-  const readiness = readinessForDate(checkins, today);
+  const readiness = readinessForDate(checkins, today, workouts, activities);
   const days = athlete.gameDate
     ? Math.round(
         (new Date(`${athlete.gameDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) /
@@ -78,7 +79,7 @@ export default function HomePage() {
     return row.date >= cutoffISO;
   });
 
-  const plan = buildPlanPreview(athlete, readiness);
+  const plan = buildPlanPreview(athlete, readiness, today, recentHardLoad(workouts, activities));
   const upcoming = plan.slice(0, Math.min(5, plan.length));
   const streak = streakOf(workouts);
   const weekMinutes = weekWorkouts.reduce((acc, row) => acc + row.durationMin, 0);
@@ -103,7 +104,11 @@ export default function HomePage() {
   const coachNote =
     days === 0
       ? "It's game day. Keep this short, keep it sharp, and finish feeling better than you started."
-      : weekWorkouts.length >= athlete.daysPerWeek
+      : todayWorkout?.plan.phase === "Basketball day"
+        ? "You have a recurring basketball commitment today. Let that be today's court work, then log it so future sessions can adjust."
+        : todayWorkout?.plan.isRestDay
+          ? `Today is a scheduled off day in your ${athlete.daysPerWeek}-day training week. Prioritize recovery; easy movement is optional.`
+        : weekWorkouts.length >= athlete.daysPerWeek
         ? `${weekWorkouts.length} sessions logged this week — that's your target hit. Protect sleep and let the adaptation happen.`
         : weekWorkouts.length === 0
           ? `No sessions logged this week yet. One focused ${athlete.minutes}-minute session today resets the whole week.`

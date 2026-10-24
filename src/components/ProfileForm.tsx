@@ -36,6 +36,43 @@ const EQUIPMENT_ORDER: Equipment[] = [
   "court",
 ];
 const INJURY_ORDER: Injury[] = ["knee", "ankle", "back", "shoulder", "hamstring"];
+const WEEKDAYS = [
+  { value: 0, label: "Mon" },
+  { value: 1, label: "Tue" },
+  { value: 2, label: "Wed" },
+  { value: 3, label: "Thu" },
+  { value: 4, label: "Fri" },
+  { value: 5, label: "Sat" },
+  { value: 6, label: "Sun" },
+];
+
+function WeekdayChecks({
+  name,
+  selected,
+}: {
+  name: "practiceDays" | "gameDays";
+  selected: number[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {WEEKDAYS.map((day) => (
+        <label
+          key={day.value}
+          className="flex cursor-pointer items-center gap-2 rounded-full border border-line bg-ink-2/70 px-3 py-2 text-[0.78rem] text-sand transition-colors has-[:checked]:border-lime/60 has-[:checked]:bg-lime/10 has-[:checked]:text-cream"
+        >
+          <input
+            type="checkbox"
+            name={name}
+            value={day.value}
+            defaultChecked={selected.includes(day.value)}
+            className="h-3.5 w-3.5 accent-[#c9f26b]"
+          />
+          {day.label}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 function Segmented<T extends string>({
   name,
@@ -112,6 +149,10 @@ function parseProfileForm(
     experience: (list("experience")[0] ?? "intermediate") as Experience,
     goal: (list("goal")[0] ?? "balanced") as Goal,
     daysPerWeek: clamp(Math.round(num("daysPerWeek", 4)), 1, 7),
+    recurringBasketballDays: {
+      practiceDays: [...new Set(list("practiceDays").map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))],
+      gameDays: [...new Set(list("gameDays").map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))],
+    },
     minutes: clamp(Math.round(num("minutes", 55) / 5) * 5, 20, 120),
     gameDate: /^\d{4}-\d{2}-\d{2}$/.test(gameDateRaw) ? gameDateRaw : null,
     equipment: list("equipment").filter((e): e is Equipment =>
@@ -422,7 +463,30 @@ export function ProfileForm({
               onChange={(event) => setDays(Number(event.target.value))}
               className="w-full"
             />
-            <p className="mt-1 text-[0.7rem] text-muted">Includes games. We keep 2 hard days apart.</p>
+            <p className="mt-1 text-[0.7rem] text-muted">Target for CourtReady workouts. Recurring basketball days are reserved separately.</p>
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-line-soft pt-5">
+          <p className="field-label">Recurring basketball schedule</p>
+          <p className="mb-4 text-[0.72rem] text-muted">
+            Mark regular team practices and game days. CourtReady will avoid stacking an extra workout on those days.
+          </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <fieldset>
+              <legend className="field-label">Practice days</legend>
+              <WeekdayChecks
+                name="practiceDays"
+                selected={profile?.recurringBasketballDays?.practiceDays ?? []}
+              />
+            </fieldset>
+            <fieldset>
+              <legend className="field-label">Game days</legend>
+              <WeekdayChecks
+                name="gameDays"
+                selected={profile?.recurringBasketballDays?.gameDays ?? []}
+              />
+            </fieldset>
           </div>
         </div>
       </div>

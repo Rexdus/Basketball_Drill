@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Badge, EmptyState, IntensityBadge, LoadChart, Stat } from "@/components/ui";
-import { useStore, readinessForDate } from "@/lib/store";
+import { useStore, readinessForDate, recentHardLoad } from "@/lib/store";
 import {
   addDays,
   buildWorkout,
@@ -14,7 +14,7 @@ import {
 import { GOAL_LABELS } from "@/lib/types";
 
 export default function PlanPage() {
-  const { athlete, checkins } = useStore();
+  const { athlete, checkins, workouts, activities } = useStore();
 
   if (!athlete) {
     return (
@@ -33,7 +33,8 @@ export default function PlanPage() {
   }
 
   const today = todayISO();
-  const readiness = readinessForDate(checkins, today);
+  const readiness = readinessForDate(checkins, today, workouts, activities);
+  const recentLoad = recentHardLoad(workouts, activities);
   const gameDays = athlete.gameDate
     ? Math.round(
         (new Date(`${athlete.gameDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) /
@@ -50,13 +51,14 @@ export default function PlanPage() {
             86_400_000,
         )
       : null;
-    const plan = buildWorkout({ profile: athlete, checkin: null, readiness, date, days: remaining });
+    const plan = buildWorkout({ profile: athlete, checkin: null, readiness, date, days: remaining, recentLoad });
     return { date, remaining, plan };
   });
 
   const totalMinutes = days.reduce((acc, day) => acc + day.plan.durationMin, 0);
+  const plannedSessions = days.filter((day) => !day.plan.isRestDay && day.remaining !== 0).length;
   const hardDays = days.filter(
-    (day) => day.plan.intensity === "build" || day.plan.intensity === "peak",
+    (day) => !day.plan.isRestDay && (day.plan.intensity === "build" || day.plan.intensity === "peak"),
   ).length;
   const gameDay = gameDays !== null && gameDays >= 0 && gameDays <= span;
 
@@ -70,8 +72,8 @@ export default function PlanPage() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
             {athlete.gameDate
-              ? `Game: ${prettyDate(athlete.gameDate)}. Each session below is built from the same profile and readiness baseline (${readiness}/100), with volume shifting as the game gets closer.`
-              : "You haven't set a game date yet, so this is a rolling development week. Add your next tip-off in your profile to unlock the full taper."}
+              ? `Game: ${prettyDate(athlete.gameDate)}. Sessions, recurring practices, and games are mapped from your weekly setup; training volume shifts as tip-off gets closer.`
+              : "You haven't set a game date yet, so this is a rolling week. Recurring basketball days are protected from extra workouts; add your next tip-off to unlock the full taper."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -85,9 +87,9 @@ export default function PlanPage() {
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Window" value={`${days.length} days`} hint="Every day mapped to a purpose" />
-        <Stat label="Planned minutes" value={totalMinutes} hint="Across the full runway" accent />
-        <Stat label="Key sessions" value={hardDays} hint="Build or peak days — never back to back" />
+        <Stat label="Window" value={`${days.length} days`} hint={`${athlete.daysPerWeek} training days per week`} />
+        <Stat label="Planned sessions" value={plannedSessions} hint={`${totalMinutes} training minutes in this runway`} accent />
+        <Stat label="Key sessions" value={hardDays} hint="Build or peak days in this runway" />
         <Stat label="Primary goal" value={GOAL_LABELS[athlete.goal]} hint="Each day skews toward this" />
       </div>
 
@@ -134,7 +136,9 @@ export default function PlanPage() {
                       <p className="text-[0.6rem] text-muted">
                         {isGame
                           ? "Game"
-                          : day.remaining !== null && day.remaining < 0
+                        : day.remaining === null
+                          ? "Week"
+                          : day.remaining < 0
                             ? `+${Math.abs(day.remaining)}`
                             : `T-${day.remaining}`}
                       </p>
@@ -144,35 +148,42 @@ export default function PlanPage() {
                         <p className="text-[0.95rem] font-bold text-cream">{day.plan.title}</p>
                         {index === 0 ? <Badge tone="flame">Today</Badge> : null}
                         {isGame ? <Badge tone="warn">Game day</Badge> : null}
-                        <IntensityBadge intensity={day.plan.intensity} />
+                        {day.plan.isRestDay
+                          ? <Badge tone="outline">{day.plan.phase === "Basketball day" ? "Basketball day" : "Off day"}</Badge>
+                          : <IntensityBadge intensity={day.plan.intensity} />}
                       </div>
                       <p className="mt-1 text-[0.78rem] text-muted">
-                        {day.plan.phase} · {day.plan.durationMin} min · load {day.plan.loadScore}/100 ·{" "}
-                        {day.plan.blocks.length} blocks
+                        {day.plan.isRestDay
+                          ? "Recovery · no training session scheduled"
+                          : `${day.plan.phase} · ${day.plan.durationMin} min · load ${day.plan.loadScore}/100 · ${day.plan.blocks.length} blocks`}
                       </p>
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-[0.75rem] font-semibold text-flame-2">
-                          View {day.plan.blocks.length} blocks
-                        </summary>
-                        <div className="mt-2 space-y-1.5">
-                          {day.plan.blocks.map((block) => (
-                            <div key={block.id} className="rounded-lg border border-line-soft bg-ink-2/60 px-3 py-2">
-                              <div className="flex items-baseline justify-between gap-2">
-                                <p className="text-[0.78rem] font-semibold text-cream">{block.title}</p>
-                                <span className="text-[0.66rem] text-muted">{block.durationMin}m</span>
+                      {day.plan.isRestDay ? (
+                        <p className="mt-2 text-[0.76rem] leading-snug text-sand">{day.plan.summary}</p>
+                      ) : (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-[0.75rem] font-semibold text-flame-2">
+                            View {day.plan.blocks.length} blocks
+                          </summary>
+                          <div className="mt-2 space-y-1.5">
+                            {day.plan.blocks.map((block) => (
+                              <div key={block.id} className="rounded-lg border border-line-soft bg-ink-2/60 px-3 py-2">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <p className="text-[0.78rem] font-semibold text-cream">{block.title}</p>
+                                  <span className="text-[0.66rem] text-muted">{block.durationMin}m</span>
+                                </div>
+                                <p className="mt-0.5 text-[0.72rem] leading-snug text-muted">
+                                  {block.exercises.map((exercise) => exercise.name).join(" · ")}
+                                </p>
                               </div>
-                              <p className="mt-0.5 text-[0.72rem] leading-snug text-muted">
-                                {block.exercises.map((exercise) => exercise.name).join(" · ")}
-                              </p>
-                            </div>
-                          ))}
-                          {index === 0 ? (
-                            <Link href="/" className="mt-1 inline-flex text-[0.74rem] font-semibold text-lime">
-                              Open today&apos;s full session →
-                            </Link>
-                          ) : null}
-                        </div>
-                      </details>
+                            ))}
+                            {index === 0 ? (
+                              <Link href="/" className="mt-1 inline-flex text-[0.74rem] font-semibold text-lime">
+                                Open today&apos;s full session →
+                              </Link>
+                            ) : null}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -184,8 +195,8 @@ export default function PlanPage() {
         <aside className="space-y-4">
           <section className="panel p-5">
             <p className="eyebrow">Load shape</p>
-            <p className="mt-1 text-[0.8rem] text-muted">
-              Hard days are separated so you adapt between sessions and arrive fresh.
+            <p className="mt-1 text-[0.8rem] leading-relaxed text-muted">
+              Bars show planned CourtReady workout load. Log the actual duration and effort of practices, pickup, and games in My log to account for their workload.
             </p>
             <div className="mt-4">
               <LoadChart

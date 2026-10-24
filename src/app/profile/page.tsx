@@ -15,6 +15,11 @@ import { bmiCategory, gameCountdownLabel, prettyDate, todayISO } from "@/lib/eng
 import { GOAL_LABELS, POSITION_LABELS } from "@/lib/types";
 import { formatHeight, formatWeight, UNITS_LABELS } from "@/lib/units";
 
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function formatWeekdays(days: number[] | undefined): string {
+  return days?.length ? days.map((day) => WEEKDAY_LABELS[day]).join(", ") : "None set";
+}
+
 export default function ProfilePage() {
   const { athlete, checkins, workouts } = useStore();
   const router = useRouter();
@@ -121,7 +126,9 @@ export default function ProfilePage() {
                 ["Height", formatHeight(athlete.heightCm, athlete.units)],
                 ["Weight", formatWeight(athlete.weightKg, athlete.units)],
                 ["Session length", `${athlete.minutes} min`],
-                ["Days per week", `${athlete.daysPerWeek}`],
+                ["CourtReady sessions / week", `${athlete.daysPerWeek}`],
+                ["Recurring practices", formatWeekdays(athlete.recurringBasketballDays?.practiceDays)],
+                ["Recurring game days", formatWeekdays(athlete.recurringBasketballDays?.gameDays)],
                 ["Next game", athlete.gameDate ? prettyDate(athlete.gameDate) : "Not scheduled"],
                 ["Check-ins logged", `${checkins.length}`],
               ].map(([label, value]) => (
