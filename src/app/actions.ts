@@ -287,6 +287,7 @@ export async function demoAthleteAction(): Promise<void> {
         age: created.age,
         heightCm: created.heightCm,
         weightKg: created.weightKg,
+        units: "metric",
         position: "guard",
         experience: "intermediate",
         goal: "vertical",

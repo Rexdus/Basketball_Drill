@@ -25,7 +25,7 @@ Open http://localhost:3000. Everything works without any environment variables.
 
 ## Deploying to GitHub Pages
 
-The repository ships with a ready-to-use GitHub Actions workflow (`.github/workflows/deploy.yml`).
+The repository ships with a ready-to-use GitHub Actions workflow (`.github/workflows/static.yml`).
 
 1. **Push this repository to GitHub** (create it on github.com first, then push `main`).
 2. Go to **Settings → Pages** in the repository.

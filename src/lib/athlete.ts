@@ -41,6 +41,7 @@ export function toProfile(row: Athlete): AthleteProfile {
     age: row.age,
     heightCm: row.heightCm,
     weightKg: row.weightKg,
+    units: "metric",
     position: (POSITIONS.includes(row.position as Position) ? row.position : "unsure") as Position,
     experience: (EXPERIENCES.includes(row.experience as Experience) ? row.experience : "intermediate") as Experience,
     goal: (GOALS.includes(row.goal as Goal) ? row.goal : "balanced") as Goal,
