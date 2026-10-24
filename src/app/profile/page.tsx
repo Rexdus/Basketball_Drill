@@ -11,7 +11,7 @@ import {
   importData,
   useStore,
 } from "@/lib/store";
-import { bmiCategory, gameCountdownLabel, prettyDate, todayISO } from "@/lib/engine";
+import { gameCountdownLabel, prettyDate, todayISO } from "@/lib/engine";
 import { GOAL_LABELS, POSITION_LABELS } from "@/lib/types";
 import { formatHeight, formatWeight, UNITS_LABELS } from "@/lib/units";
 
@@ -107,7 +107,7 @@ export default function ProfilePage() {
         />
         <Stat label="Sessions logged" value={completed.length} hint="All-time completed sessions" />
         <Stat label="Total minutes" value={totalMinutes} hint="Banked training volume" />
-        <Stat label="Body composition" value={bmiCategory(athlete)} hint="Impact caps applied automatically" />
+        <Stat label="Training experience" value={athlete.experience} hint="Used to scale exercise doses and coaching cues" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.55fr_1fr] lg:items-start">

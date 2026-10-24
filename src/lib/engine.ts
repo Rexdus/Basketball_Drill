@@ -142,20 +142,6 @@ function readinessCap(score: number): Intensity {
   return "restore";
 }
 
-function bodyMassIndex(profile: AthleteProfile): number {
-  const m = profile.heightCm / 100;
-  return profile.weightKg / (m * m);
-}
-
-export function bmiCategory(profile: Pick<AthleteProfile, "heightCm" | "weightKg">): string {
-  const m = profile.heightCm / 100;
-  const bmi = profile.weightKg / (m * m);
-  if (bmi < 18.5) return "Lean";
-  if (bmi < 25) return "Balanced";
-  if (bmi < 30) return "Solid";
-  return "High impact managed";
-}
-
 /* ------------------------------------------------------------------- phase */
 
 type PhaseSpec = {
@@ -201,13 +187,13 @@ const BLOCKS: Record<Category, Omit<BlockSpec, "weight">> = {
   warmup: { title: "Warm-up · raise the temperature", category: "warmup", intent: "Prepare joints, wake the nervous system, no fatigue." },
   mobility: { title: "Mobility · unlock range", category: "mobility", intent: "Access the positions your game demands." },
   plyo: { title: "Jump & land", category: "plyo", intent: "Maximum intent, minimum reps. Stop when output drops." },
-  power: { title: "Explode", category: "power", intent: "Fast, violent, full recovery. Speed is the point." },
+  power: { title: "Explosive strength", category: "power", intent: "Move fast with a controllable load, rest fully, and stop when speed or form drops." },
   strength: { title: "Strength", category: "strength", intent: "Own the movement, then add load. Leave 2 reps in the tank." },
   agility: { title: "Speed & change of direction", category: "agility", intent: "Sharp plants and clean decelerations, game speed." },
   conditioning: { title: "Engine work", category: "conditioning", intent: "Game-paced intervals so the 4th quarter feels familiar." },
   skill: { title: "Skill under control", category: "skill", intent: "Game-speed reps with a scoreboard mindset." },
   core: { title: "Core & anti-rotation", category: "core", intent: "Brace, resist, transfer force. No wasted motion." },
-  recovery: { title: "Downshift", category: "recovery", intent: "Bring the nervous system down and restore tissue." },
+  recovery: { title: "Downshift", category: "recovery", intent: "Easy movement and comfortable range; this is not injury treatment." },
 };
 
 const FOCUS_BLOCKS: Record<Goal, Category[]> = {
@@ -232,12 +218,11 @@ const FOCUS_TITLES: Record<Goal, string> = {
 
 function impactCap(profile: AthleteProfile, readiness: number, days: number | null): number {
   let cap = 3;
+  // Keep a conservative, development-aware cap for younger athletes; adult
+  // impact eligibility is driven by readiness, injury flags, and game proximity,
+  // not BMI or chronological age alone.
   if (profile.age < 14) cap = 1;
   else if (profile.age < 16) cap = 2;
-  else if (profile.age >= 50) cap = 1;
-  else if (profile.age >= 40) cap = 2;
-  if (bodyMassIndex(profile) >= 33) cap = Math.min(cap, 1);
-  else if (bodyMassIndex(profile) >= 29) cap = Math.min(cap, 2);
   if (profile.injuries.some((i) => ["knee", "ankle", "hamstring"].includes(i))) cap = Math.min(cap, 2);
   if (readiness < 50) cap = Math.min(cap, 2);
   if (readiness < 35) cap = Math.min(cap, 1);
@@ -282,8 +267,12 @@ function pickDrills(
     })
     .sort((a, b) => b.score - a.score);
   const picked: Drill[] = [];
+  const selectionLimit = category === "plyo" ? Math.min(count, 2) : count;
   for (const item of scored) {
-    if (picked.length >= count) break;
+    if (picked.length >= selectionLimit) break;
+    // Keep the warm-up dynamic and progressive without stacking multiple
+    // jumping/impact drills before the main session.
+    if (category === "warmup" && item.drill.impact >= 2 && picked.some((drill) => drill.impact >= 2)) continue;
     picked.push(item.drill);
     used.add(item.drill.id);
   }
@@ -305,8 +294,9 @@ function loadHint(profile: AthleteProfile, category: Category): string | undefin
   const byExperience: Record<Experience, string> = {
     beginner: "RPE 6–7 · technique first",
     intermediate: "RPE 7–8 · leave 2 reps",
-    advanced: "RPE 8–9 · last set hard",
+    advanced: "RPE 7–8 · stop before form slips",
   };
+  if (profile.age < 16) return "RPE 6–7 · technique first; qualified adult supervision";
   return byExperience[profile.experience];
 }
 
@@ -444,7 +434,8 @@ export function buildWorkout({ profile, checkin, readiness, date, days, recentLo
   const wantedRank = Math.min(INTENSITY_RANK[phase.intensity], INTENSITY_RANK[readinessCap(readiness)]);
   let intensity: Intensity;
   if (days === 0) {
-    intensity = "peak";
+    // A game-day session is an activation primer, not a maximal training day.
+    intensity = focus === "recovery" ? "restore" : "maintain";
   } else if (focus === "recovery") {
     intensity = "restore";
   } else {
@@ -576,15 +567,14 @@ export function buildWorkout({ profile, checkin, readiness, date, days, recentLo
   );
 
   const cautions: string[] = [];
-  const bmi = bodyMassIndex(profile);
-  if (bmi >= 30) cautions.push("Higher body mass: jumping volume is capped and low-impact options are prioritised to protect knees and ankles.");
-  if (profile.age < 16) cautions.push("Youth athlete: no maximal loading, focus on landings, coordination and clean technique.");
-  if (profile.age >= 40) cautions.push("Masters athlete: plyometric volume is reduced — quality landings and longer rest between sets.");
+  if (profile.age < 16) {
+    cautions.push("Youth athlete: use qualified adult supervision for strength, power and jumping; prioritize skill, controlled landings and gradual progression. The app's age filters are conservative heuristics, not a readiness assessment.");
+  }
   if (profile.injuries.length > 0) {
     cautions.push("Injury history is filtered out of today's plan. Any sharp pain = stop the set, not push through it.");
   }
-  if ((checkin?.sleepHours ?? 8) < 6.5) cautions.push("Short sleep last night: keep the last rep of every set in the tank and aim for 8 h tonight.");
-  if ((checkin?.hydration ?? 5) <= 2) cautions.push("Hydration is low. Drink 500 ml with a pinch of salt before you start.");
+  if ((checkin?.sleepHours ?? 8) < 6.5) cautions.push("Short sleep last night: keep the session easy if you feel unusually tired and prioritize an adequate sleep opportunity tonight.");
+  if ((checkin?.hydration ?? 5) <= 2) cautions.push("You reported low hydration. Drink to thirst and account for heat and sweat; do not force a fixed fluid or salt dose.");
   if (readiness < 40) cautions.push("Readiness is low — this is a restore session, not a punishment. Skipping today would also be a valid choice.");
   if (days === 0) cautions.push("Game day: nothing new, nothing heavy. Finish this routine feeling better than you started.");
   if (days !== null && days > 0 && days <= 2) cautions.push("You are inside 48 hours of tip-off — no soreness is the goal. Stop any set that leaves you heavy-legged.");
@@ -608,8 +598,8 @@ export function buildWorkout({ profile, checkin, readiness, date, days, recentLo
   whyThis.push(
     `Readiness scored ${readiness}/100 (${readinessLabel(readiness)}) from your sleep, energy, soreness, stress and hydration, so intensity landed on ${intensity.toUpperCase()}.`,
   );
-  if (recentLoad > 0) whyThis.push("Heavy work in the last 48 hours reduced today's jump volume — that's how you stay springy all season.");
-  if (profile.injuries.length > 0) whyThis.push("Drills loading your flagged areas were removed automatically; the substitutions train the same qualities safely.");
+  if (recentLoad > 0) whyThis.push("Recent logged training load contributed to today's readiness estimate. It is a rough context signal, not an injury-risk prediction.");
+  if (profile.injuries.length > 0) whyThis.push("Drills matching your flagged areas were filtered out; substitutions keep a similar training focus, but are not medical clearance or a safety guarantee.");
   if (intensity === "restore") whyThis.push("Low readiness days are where consistency is won: mobility, core and easy skill beats a heroic workout you can't repeat tomorrow.");
 
   const nutrition = buildNutrition(profile, intensity, days, durationMin);

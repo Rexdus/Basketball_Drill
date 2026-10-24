@@ -196,7 +196,7 @@ export default function PlanPage() {
           <section className="panel p-5">
             <p className="eyebrow">Load shape</p>
             <p className="mt-1 text-[0.8rem] leading-relaxed text-muted">
-              Bars show planned CourtReady workout load. Log the actual duration and effort of practices, pickup, and games in My log to account for their workload.
+              Bars show planned CourtReady workout load. Log the duration and effort of practices, games, and bike workouts in My log to account for their workload.
             </p>
             <div className="mt-4">
               <LoadChart

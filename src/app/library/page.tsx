@@ -21,8 +21,8 @@ export default function LibraryPage() {
           <p className="eyebrow">Drill library</p>
           <h1 className="display mt-2 text-[clamp(2.1rem,5vw,3.1rem)]">{DRILLS.length} drills, zero fluff.</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
-            Every drill the engine can prescribe — with coaching cues, dose progressions, equipment requirements and
-            impact level. This is the exact pool your sessions are drawn from.
+            Every drill the engine can prescribe — with coaching cues, dose progressions, equipment requirements, an
+            original looping movement sketch, and category-specific evidence and safety references.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -49,6 +49,15 @@ export default function LibraryPage() {
         ))}
       </div>
 
+      <div id="movement-evidence" className="mt-5 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+        <p className="text-[0.78rem] font-semibold text-amber-100">Evidence-aware, not clinically validated</p>
+        <p className="mt-1 text-[0.74rem] leading-relaxed text-sand">
+          Reputable guidance informs the categories and safety cues below; it does not validate every drill, exact set/rep
+          dose, or an individual athlete&apos;s readiness. Looping stick-figure sketches are original visual aids, not
+          coaching videos. Stop for pain, and get qualified coaching for loaded or high-impact work—especially for youth.
+        </p>
+      </div>
+
       <div className="mt-6">
         <DrillLibrary
           drills={DRILLS}
@@ -66,7 +75,7 @@ export default function LibraryPage() {
         />
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           {[
-            ["Impact ceiling", "Age, body mass, readiness and injury flags set the highest impact level allowed today."],
+            ["Impact filter", "Readiness, training timing, flagged injuries and conservative youth age bands filter higher-impact drills; BMI is not used as a proxy for movement readiness."],
             ["Equipment honesty", "A drill is only eligible if every piece of gear it needs is in your profile."],
             ["Dose by level", "Beginners get technique reps, advanced athletes get more sets and higher intent."],
           ].map(([title, body]) => (

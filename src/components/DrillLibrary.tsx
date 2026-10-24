@@ -1,7 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { LIBRARY_FILTERS, type Drill } from "@/lib/exercises";
+import { demoForDrill } from "@/lib/drill-demos";
+import { evidenceForCategory } from "@/lib/exercise-evidence";
 import { EQUIPMENT_LABELS, INJURY_LABELS, type Category, type Equipment, type Injury } from "@/lib/types";
 
 const IMPACT_LABELS = ["No impact", "Low impact", "Moderate impact", "High impact"];
@@ -86,43 +89,78 @@ export function DrillLibrary({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((drill) => (
-          <article key={drill.id} className="panel flex flex-col p-4">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-[0.92rem] font-bold leading-tight text-cream">{drill.name}</h3>
-              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.1em] text-muted">
-                {drill.category}
-              </span>
-            </div>
-            <p className="mt-1.5 text-[0.78rem] leading-snug text-sand">{drill.cue}</p>
-            <div className="mt-auto pt-3">
-              <div className="flex items-center justify-between gap-2 border-t border-line-soft pt-2.5">
-                <p className="text-[0.74rem] font-semibold text-flame-2">{drill.dose.intermediate}</p>
-                <span className="text-[0.62rem] uppercase tracking-[0.1em] text-muted">
-                  {IMPACT_LABELS[drill.impact]}
+        {filtered.map((drill) => {
+          const demo = demoForDrill(drill);
+          const evidence = evidenceForCategory(drill.category);
+          return (
+            <article key={drill.id} className="panel flex flex-col p-4">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-[0.92rem] font-bold leading-tight text-cream">{drill.name}</h3>
+                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.1em] text-muted">
+                  {drill.category}
                 </span>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {drill.gear.length > 0 ? (
-                  drill.gear.map((item) => (
-                    <span key={item} className="rounded border border-line-soft bg-white/[0.02] px-1.5 py-0.5 text-[0.62rem] text-sand">
-                      {EQUIPMENT_LABELS[item]}
-                    </span>
-                  ))
-                ) : (
-                  <span className="rounded border border-line-soft bg-white/[0.02] px-1.5 py-0.5 text-[0.62rem] text-sand">
-                    Bodyweight
-                  </span>
-                )}
-                {drill.contraindications?.map((injury) => (
-                  <span key={injury} className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[0.62rem] text-amber-200">
-                    caution: {INJURY_LABELS[injury]}
-                  </span>
-                ))}
+              <p className="mt-1.5 text-[0.78rem] leading-snug text-sand">{drill.cue}</p>
+              <div className="mt-3 overflow-hidden rounded-xl border border-line-soft bg-ink-2/80">
+                <Image
+                  src={demo.src}
+                  alt={`${demo.label} movement illustration`}
+                  width={240}
+                  height={160}
+                  unoptimized
+                  className="h-[104px] w-full object-contain"
+                />
+                <p className="border-t border-line-soft px-2.5 py-1.5 text-[0.66rem] text-muted">
+                  {demo.label} · schematic loop, not coaching video
+                </p>
               </div>
-            </div>
-          </article>
-        ))}
+              <details className="mt-2 rounded-lg border border-line-soft bg-white/[0.02] px-2.5 py-2">
+                <summary className="cursor-pointer text-[0.72rem] font-semibold text-flame-2">Evidence & safety notes</summary>
+                <p className="mt-2 text-[0.7rem] leading-relaxed text-sand">{evidence.note}</p>
+                <ul className="mt-2 space-y-1.5">
+                  {evidence.references.map((reference) => (
+                    <li key={reference.id}>
+                      <a
+                        href={reference.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[0.68rem] font-medium leading-snug text-lime underline decoration-lime/40 underline-offset-2 hover:decoration-lime"
+                      >
+                        {reference.organization} ({reference.year}): {reference.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between gap-2 border-t border-line-soft pt-2.5">
+                  <p className="text-[0.74rem] font-semibold text-flame-2">{drill.dose.intermediate}</p>
+                  <span className="text-[0.62rem] uppercase tracking-[0.1em] text-muted">
+                    {IMPACT_LABELS[drill.impact]}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {drill.gear.length > 0 ? (
+                    drill.gear.map((item) => (
+                      <span key={item} className="rounded border border-line-soft bg-white/[0.02] px-1.5 py-0.5 text-[0.62rem] text-sand">
+                        {EQUIPMENT_LABELS[item]}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="rounded border border-line-soft bg-white/[0.02] px-1.5 py-0.5 text-[0.62rem] text-sand">
+                      Bodyweight
+                    </span>
+                  )}
+                  {drill.contraindications?.map((injury) => (
+                    <span key={injury} className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[0.62rem] text-amber-200">
+                      caution: {INJURY_LABELS[injury]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {filtered.length === 0 ? (

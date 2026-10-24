@@ -1,6 +1,6 @@
 import type {
-  BasketballActivity,
-  BasketballActivityType,
+  TrainingActivity,
+  TrainingActivityType,
   CheckinInput,
   Equipment,
   Goal,
@@ -37,7 +37,7 @@ export type BackupData = {
   athlete: BackupAthlete | null;
   checkins: (CheckinInput & { date: string; readiness: number })[];
   workouts: unknown[];
-  activities: BasketballActivity[];
+  activities: TrainingActivity[];
 };
 
 const POSITIONS = ["guard", "wing", "big", "unsure"] as const;
@@ -108,12 +108,13 @@ function validCheckin(value: unknown): value is BackupData["checkins"][number] {
   );
 }
 
-function validActivity(value: unknown): value is BasketballActivity {
+function validActivity(value: unknown): value is TrainingActivity {
   if (!isRecord(value)) return false;
   return isString(value.id) && isDateString(value.date) &&
-    isEnumValue<BasketballActivityType>(value.type, ["practice", "pickup", "game"]) &&
+    isEnumValue<TrainingActivityType>(value.type, ["practice", "pickup", "game", "indoor-bike", "outdoor-bike"]) &&
     isFiniteNumber(value.durationMin, 5, 360) && Number.isInteger(value.durationMin) &&
     isFiniteNumber(value.rpe, 1, 10) && Number.isInteger(value.rpe) &&
+    (value.distanceKm === undefined || value.distanceKm === null || isFiniteNumber(value.distanceKm, 0, 1000)) &&
     (value.notes === null || (isString(value.notes) && value.notes.length <= 300)) &&
     isString(value.createdAt) && Number.isFinite(Date.parse(value.createdAt));
 }

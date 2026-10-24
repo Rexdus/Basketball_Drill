@@ -12,8 +12,8 @@ import {
 import { parseBackup, runStorageTransaction } from "@/lib/backup";
 import type {
   AthleteProfile,
-  BasketballActivity,
-  BasketballActivityType,
+  TrainingActivity,
+  TrainingActivityType,
   CheckinInput,
   Goal,
   Intensity,
@@ -70,7 +70,7 @@ export type StoreSnapshot = {
   athlete: StoredAthlete | null;
   checkins: StoredCheckin[];
   workouts: StoredWorkout[];
-  activities: BasketballActivity[];
+  activities: TrainingActivity[];
 };
 
 /* ------------------------------------------------------------- primitives */
@@ -129,8 +129,8 @@ export function getWorkout(date: string): StoredWorkout | null {
   return listWorkouts().find((row) => row.date === date) ?? null;
 }
 
-export function listBasketballActivities(): BasketballActivity[] {
-  return readJSON<BasketballActivity[]>(KEYS.activities, []).sort((a, b) =>
+export function listTrainingActivities(): TrainingActivity[] {
+  return readJSON<TrainingActivity[]>(KEYS.activities, []).sort((a, b) =>
     a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date),
   );
 }
@@ -139,27 +139,33 @@ export function listBasketballActivities(): BasketballActivity[] {
 
 export function recentHardLoad(
   workouts: StoredWorkout[],
-  activities: BasketballActivity[] = listBasketballActivities(),
+  activities: TrainingActivity[] = listTrainingActivities(),
 ): number {
   const today = todayISO();
   const cutoff = addDays(today, -2);
   const workoutLoad = workouts
     .filter((row) => row.status === "completed" && row.date >= cutoff && row.date <= today)
-    .reduce((acc, row) => acc + row.loadScore / 30, 0);
-  const basketballLoad = activities
+    .reduce((acc, row) => {
+      // Prefer observed session-RPE × duration after completion; otherwise use
+      // the planned session score as a clearly approximate fallback.
+      const observedLoad = row.rpe == null ? row.loadScore / 30 : (row.durationMin * (row.rpe / 10)) / 30;
+      return acc + observedLoad;
+    }, 0);
+  const activityLoad = activities
     .filter((row) => row.date >= cutoff && row.date <= today)
     .reduce((acc, row) => {
-      const eventFactor = row.type === "game" ? 1.15 : row.type === "pickup" ? 1.05 : 1;
+      const eventFactor =
+        row.type === "game" ? 1.15 : row.type === "pickup" || row.type === "outdoor-bike" ? 1.05 : row.type === "indoor-bike" ? 0.95 : 1;
       return acc + ((row.durationMin * (row.rpe / 10) * eventFactor) / 30);
     }, 0);
-  return workoutLoad + basketballLoad;
+  return workoutLoad + activityLoad;
 }
 
 export function readinessForDate(
   checkins: StoredCheckin[],
   date = todayISO(),
   workouts: StoredWorkout[] = listWorkouts(),
-  activities: BasketballActivity[] = listBasketballActivities(),
+  activities: TrainingActivity[] = listTrainingActivities(),
 ): number {
   const checkin = checkins.find((row) => row.date === date);
   if (checkin) return checkin.readiness;
@@ -342,13 +348,14 @@ export function skipWorkout(id: number, feedback: string): void {
   refresh();
 }
 
-export function saveBasketballActivity(input: {
+export function saveTrainingActivity(input: {
   date: string;
-  type: BasketballActivityType;
+  type: TrainingActivityType;
   durationMin: number;
   rpe: number;
+  distanceKm?: number | null;
   notes?: string;
-}): BasketballActivity {
+}): TrainingActivity {
   const today = todayISO();
   const parsedDate = new Date(`${input.date}T12:00:00`);
   if (
@@ -359,29 +366,32 @@ export function saveBasketballActivity(input: {
   ) {
     throw new Error("Choose a valid activity date no later than today.");
   }
-  if (!["practice", "pickup", "game"].includes(input.type)) {
-    throw new Error("Choose a valid basketball activity type.");
+  if (!["practice", "pickup", "game", "indoor-bike", "outdoor-bike"].includes(input.type)) {
+    throw new Error("Choose a valid activity type.");
   }
   const durationInput = Number.isFinite(input.durationMin) ? input.durationMin : 60;
   const rpeInput = Number.isFinite(input.rpe) ? input.rpe : 6;
-  const activity: BasketballActivity = {
+  const activity: TrainingActivity = {
     id: newId(),
     date: input.date,
     type: input.type,
     durationMin: Math.round(Math.min(360, Math.max(5, durationInput)) / 5) * 5,
     rpe: Math.round(Math.min(10, Math.max(1, rpeInput))),
+    distanceKm: input.type.endsWith("bike") && Number.isFinite(input.distanceKm)
+      ? Math.min(1000, Math.max(0, input.distanceKm as number))
+      : null,
     notes: input.notes?.trim().slice(0, 300) || null,
     createdAt: new Date().toISOString(),
   };
-  writeJSON(KEYS.activities, [...listBasketballActivities(), activity]);
+  writeJSON(KEYS.activities, [...listTrainingActivities(), activity]);
   refreshTodayReadiness();
   refresh();
   if (activity.date >= addDays(today, -2) && activity.date <= today) rebuildUncompletedToday();
   return activity;
 }
 
-export function deleteBasketballActivity(id: string): void {
-  const activities = listBasketballActivities();
+export function deleteTrainingActivity(id: string): void {
+  const activities = listTrainingActivities();
   const removed = activities.find((activity) => activity.id === id);
   writeJSON(KEYS.activities, activities.filter((activity) => activity.id !== id));
   refreshTodayReadiness();
@@ -395,7 +405,7 @@ function refreshTodayReadiness(): void {
   if (!checkin) return;
   const next: StoredCheckin = {
     ...checkin,
-    readiness: computeReadiness(checkin, recentHardLoad(listWorkouts(), listBasketballActivities())),
+    readiness: computeReadiness(checkin, recentHardLoad(listWorkouts(), listTrainingActivities())),
   };
   writeJSON(KEYS.checkins, listCheckins().map((row) => row.date === today ? next : row));
 }
@@ -553,7 +563,7 @@ export function exportData(): string {
       athlete: getAthlete(),
       checkins: listCheckins(),
       workouts: listWorkouts(),
-      activities: listBasketballActivities(),
+      activities: listTrainingActivities(),
     },
     null,
     2,
@@ -610,7 +620,7 @@ function loadSnapshot(): StoreSnapshot {
       athlete: getAthlete(),
       checkins: listCheckins(),
       workouts: listWorkouts(),
-      activities: listBasketballActivities(),
+      activities: listTrainingActivities(),
     };
   }
   return snapshot;

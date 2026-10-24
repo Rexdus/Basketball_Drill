@@ -185,7 +185,7 @@ export const DRILLS: Drill[] = [
     category: "mobility",
     gear: [],
     impact: 0,
-    cue: "Wide knee, hips back, spine long. Groin health protects your lateral game.",
+    cue: "Wide knee, hips back, spine long. Move smoothly through a comfortable range; do not force the stretch.",
     dose: d("8 each side", "10 each side", "12 each side"),
   },
   {
@@ -369,7 +369,7 @@ export const DRILLS: Drill[] = [
     gear: ["dumbbells"],
     impact: 1,
     contraindications: ["shoulder"],
-    cue: "Hinge, then jump the weight up. Elbows high, light weight, violent intent.",
+    cue: "Hinge, then drive smoothly through the legs and hips to bring a light dumbbell toward chest height. Stop if it pinches or form slips.",
     dose: d("3 × 5", "3 × 6", "4 × 5"),
   },
   {
@@ -599,7 +599,7 @@ export const DRILLS: Drill[] = [
     gear: ["box"],
     impact: 0,
     contraindications: ["knee"],
-    cue: "Adductor strength prevents groin strains. Lift hips high, breathe.",
+    cue: "Lift hips high, breathe steadily, and stop if the position causes pain. Build range and hold time gradually.",
     dose: d("2 × 15 sec each", "3 × 20 sec each", "3 × 30 sec each"),
   },
   {

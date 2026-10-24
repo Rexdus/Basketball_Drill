@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Badge, EmptyState, IntensityBadge, LoadChart, Stat, TrendLine } from "@/components/ui";
-import { BasketballActivityLog } from "@/components/BasketballActivityLog";
+import { ActivityLog } from "@/components/ActivityLog";
 import { streakOf, useStore } from "@/lib/store";
 import { addDays, prettyDate, todayISO, weekdayShort } from "@/lib/engine";
 
@@ -30,7 +30,7 @@ export default function HistoryPage() {
   const completed = workouts.filter((row) => row.status === "completed");
   const skipped = workouts.filter((row) => row.status === "skipped");
   const totalMinutes = completed.reduce((acc, row) => acc + row.durationMin, 0);
-  const basketballMinutes = activities.reduce((acc, row) => acc + row.durationMin, 0);
+  const activityMinutes = activities.reduce((acc, row) => acc + row.durationMin, 0);
   const avgRpe = completed.length
     ? Math.round((completed.reduce((acc, row) => acc + (row.rpe ?? 7), 0) / completed.length) * 10) / 10
     : 0;
@@ -43,13 +43,15 @@ export default function HistoryPage() {
   const chart = Array.from({ length: 14 }, (_, index) => addDays(today, index - 13)).map((date) => {
     const workout = workouts.find((row) => row.date === date);
     const dayActivities = activities.filter((activity) => activity.date === date);
-    const courtLoad = dayActivities.reduce((sum, activity) => {
-      const factor = activity.type === "game" ? 1.15 : activity.type === "pickup" ? 1.05 : 1;
+    const activityLoad = dayActivities.reduce((sum, activity) => {
+      const factor = activity.type === "game" ? 1.15
+        : activity.type === "pickup" || activity.type === "outdoor-bike" ? 1.05
+          : activity.type === "indoor-bike" ? 0.95 : 1;
       return sum + activity.durationMin * (activity.rpe / 10) * factor;
     }, 0);
     return {
       label: weekdayShort(date),
-      value: Math.round((workout?.loadScore ?? 0) + courtLoad),
+      value: Math.round((workout?.loadScore ?? 0) + activityLoad),
       completed: workout?.status === "completed" || dayActivities.length > 0,
       today: date === today,
     };
@@ -69,8 +71,7 @@ export default function HistoryPage() {
           <p className="eyebrow">Training log</p>
           <h1 className="display mt-2 text-[clamp(2.1rem,5vw,3.1rem)]">Receipts, not resolutions.</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">
-            Every completed session, readiness score and RPE you log feeds tomorrow&apos;s prescription. Consistency
-            is the variable that actually moves your game.
+            CourtReady sessions and logged court or bike workouts help shape upcoming prescriptions. Capture how long and how hard you worked so the plan reflects your full training load.
           </p>
         </div>
         <Link href="/" className="btn btn-primary">
@@ -80,7 +81,7 @@ export default function HistoryPage() {
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Sessions logged" value={completed.length} hint={`${skipped.length} skipped by choice`} accent />
-        <Stat label="Court activities" value={activities.length} hint={`${basketballMinutes} min across practice, pickup & games`} />
+        <Stat label="Activities logged" value={activities.length} hint={`${activityMinutes} min across court and bike workouts`} />
         <Stat label="Workout minutes" value={totalMinutes} hint="Completed CourtReady sessions" />
         <Stat label="Avg readiness" value={avgReadiness || "—"} hint="Across your last check-ins" />
         <Stat label="Avg RPE" value={avgRpe || "—"} hint={`Streak: ${streak} day${streak === 1 ? "" : "s"}`} />
@@ -88,7 +89,7 @@ export default function HistoryPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         <div className="space-y-4">
-          <BasketballActivityLog activities={activities} />
+          <ActivityLog activities={activities} units={athlete.units} />
           <section className="panel p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -231,7 +232,7 @@ export default function HistoryPage() {
                 <span className="h-2.5 w-2.5 rounded-sm bg-lime/40" /> Planned
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-cyan-400/70" /> Basketball activity
+                <span className="h-2.5 w-2.5 rounded-sm bg-cyan-400/70" /> Logged activity
               </span>
             </div>
           </section>

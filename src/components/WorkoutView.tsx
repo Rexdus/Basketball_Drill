@@ -1,12 +1,17 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { DRILLS } from "@/lib/exercises";
+import { demoForDrill } from "@/lib/drill-demos";
 import type { StoredWorkout } from "@/lib/store";
 import { completeWorkout, skipWorkout } from "@/lib/store";
 import type { Units, WorkoutPlan } from "@/lib/types";
 import { formatWeight } from "@/lib/units";
 import { Badge, IntensityBadge, Meter } from "./ui";
+
+const DRILL_BY_NAME = new Map(DRILLS.map((drill) => [drill.name, drill]));
 
 const TYPE_ICON: Record<string, string> = {
   warmup: "🔥",
@@ -85,6 +90,9 @@ export function WorkoutView({
               </div>
               <h2 className="display mt-3 text-3xl text-cream sm:text-4xl">{plan.title}</h2>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-sand">{plan.summary}</p>
+              <Link href="/library#movement-evidence" className="mt-2 inline-flex text-[0.74rem] font-semibold text-flame-2 underline decoration-flame/40 underline-offset-2">
+                Movement demos, evidence and safety notes →
+              </Link>
             </div>
             <div className="w-full max-w-[15rem] rounded-2xl border border-line bg-ink/60 p-4">
               <div className="flex items-baseline justify-between">
@@ -124,24 +132,40 @@ export function WorkoutView({
                 </div>
 
                 <ul className="mt-3 space-y-2">
-                  {block.exercises.map((exercise, index) => (
-                    <li
-                      key={`${exercise.name}-${index}`}
-                      className="rounded-xl border border-line-soft bg-ink-2/70 px-3.5 py-3"
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <p className="text-[0.88rem] font-semibold text-cream">{exercise.name}</p>
-                        <p className="text-[0.78rem] font-semibold text-flame-2">{exercise.dose}</p>
-                      </div>
-                      <p className="mt-1 text-[0.76rem] leading-snug text-muted">{exercise.cue}</p>
-                      {exercise.load || exercise.rest ? (
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] uppercase tracking-[0.08em] text-[#7f8676]">
-                          {exercise.load ? <span>{exercise.load}</span> : null}
-                          {exercise.rest ? <span>{exercise.rest}</span> : null}
+                  {block.exercises.map((exercise, index) => {
+                    const drill = DRILL_BY_NAME.get(exercise.name);
+                    const demo = drill ? demoForDrill(drill) : null;
+                    return (
+                      <li
+                        key={`${exercise.name}-${index}`}
+                        className="rounded-xl border border-line-soft bg-ink-2/70 px-3.5 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          {demo ? (
+                            <Image
+                              src={demo.src}
+                              alt={`${demo.label} movement illustration`}
+                              width={120}
+                              height={80}
+                              unoptimized
+                              className="h-12 w-[4.5rem] shrink-0 rounded-md bg-ink object-contain"
+                            />
+                          ) : null}
+                          <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <p className="text-[0.88rem] font-semibold text-cream">{exercise.name}</p>
+                            <p className="text-[0.78rem] font-semibold text-flame-2">{exercise.dose}</p>
+                          </div>
                         </div>
-                      ) : null}
-                    </li>
-                  ))}
+                        <p className="mt-1 text-[0.76rem] leading-snug text-muted">{exercise.cue}</p>
+                        {exercise.load || exercise.rest ? (
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] uppercase tracking-[0.08em] text-[#7f8676]">
+                            {exercise.load ? <span>{exercise.load}</span> : null}
+                            {exercise.rest ? <span>{exercise.rest}</span> : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             ))}
