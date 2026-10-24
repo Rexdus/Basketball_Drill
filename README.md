@@ -41,6 +41,8 @@ The workflow:
 
 Your site will be live at `https://<owner>.github.io/<repo-name>/`.
 
+CourtReady is published at [https://rexdus.github.io/CourtReady/](https://rexdus.github.io/CourtReady/).
+
 > **Renaming the repository?** No problem — the workflow derives the base path from the repository name on every run, so rename freely and redeploy.
 
 ### Building the static site by hand
