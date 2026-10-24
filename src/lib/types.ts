@@ -14,6 +14,23 @@ export type Equipment =
   | "hoop"
   | "court";
 export type Injury = "knee" | "ankle" | "back" | "shoulder" | "hamstring";
+export type BasketballActivityType = "practice" | "pickup" | "game";
+
+/** Weekday indices use Monday=0 through Sunday=6. */
+export type RecurringBasketballDays = {
+  practiceDays: number[];
+  gameDays: number[];
+};
+
+export type BasketballActivity = {
+  id: string;
+  date: string;
+  type: BasketballActivityType;
+  durationMin: number;
+  rpe: number;
+  notes: string | null;
+  createdAt: string;
+};
 export type Category =
   | "warmup"
   | "mobility"
@@ -40,6 +57,8 @@ export type AthleteProfile = {
   experience: Experience;
   goal: Goal;
   daysPerWeek: number;
+  /** Recurring on-court commitments; gym sessions are scheduled on other days. */
+  recurringBasketballDays?: RecurringBasketballDays;
   minutes: number;
   gameDate: string | null;
   equipment: Equipment[];
@@ -99,6 +118,8 @@ export type WorkoutPlan = {
   cautions: string[];
   nutrition: NutritionPlan;
   finisher: string;
+  /** Scheduled off-day marker. Off days are not loggable training sessions. */
+  isRestDay?: boolean;
 };
 
 export const POSITION_LABELS: Record<Position, string> = {

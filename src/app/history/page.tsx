@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { Badge, EmptyState, IntensityBadge, LoadChart, Stat, TrendLine } from "@/components/ui";
+import { BasketballActivityLog } from "@/components/BasketballActivityLog";
 import { streakOf, useStore } from "@/lib/store";
 import { addDays, prettyDate, todayISO, weekdayShort } from "@/lib/engine";
 
 export default function HistoryPage() {
-  const { athlete, checkins, workouts } = useStore();
+  const { athlete, checkins, workouts, activities } = useStore();
 
   if (!athlete) {
     return (
@@ -29,6 +30,7 @@ export default function HistoryPage() {
   const completed = workouts.filter((row) => row.status === "completed");
   const skipped = workouts.filter((row) => row.status === "skipped");
   const totalMinutes = completed.reduce((acc, row) => acc + row.durationMin, 0);
+  const basketballMinutes = activities.reduce((acc, row) => acc + row.durationMin, 0);
   const avgRpe = completed.length
     ? Math.round((completed.reduce((acc, row) => acc + (row.rpe ?? 7), 0) / completed.length) * 10) / 10
     : 0;
@@ -38,20 +40,26 @@ export default function HistoryPage() {
   const streak = streakOf(workouts);
   const today = todayISO();
 
-  const chart = sortedWorkouts
-    .filter((row) => row.date >= addDays(today, -13))
-    .reverse()
-    .map((row) => ({
-      label: weekdayShort(row.date),
-      value: row.loadScore,
-      completed: row.status === "completed",
-      today: row.date === today,
-    }));
+  const chart = Array.from({ length: 14 }, (_, index) => addDays(today, index - 13)).map((date) => {
+    const workout = workouts.find((row) => row.date === date);
+    const dayActivities = activities.filter((activity) => activity.date === date);
+    const courtLoad = dayActivities.reduce((sum, activity) => {
+      const factor = activity.type === "game" ? 1.15 : activity.type === "pickup" ? 1.05 : 1;
+      return sum + activity.durationMin * (activity.rpe / 10) * factor;
+    }, 0);
+    return {
+      label: weekdayShort(date),
+      value: Math.round((workout?.loadScore ?? 0) + courtLoad),
+      completed: workout?.status === "completed" || dayActivities.length > 0,
+      today: date === today,
+    };
+  });
 
   const last21 = Array.from({ length: 21 }, (_, index) => {
     const date = addDays(today, index - 20);
     const row = workouts.find((workout) => workout.date === date);
-    return { date, row };
+    const dayActivities = activities.filter((activity) => activity.date === date);
+    return { date, row, dayActivities };
   });
 
   return (
@@ -70,15 +78,17 @@ export default function HistoryPage() {
         </Link>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Sessions logged" value={completed.length} hint={`${skipped.length} skipped by choice`} accent />
-        <Stat label="Minutes trained" value={totalMinutes} hint="Logged across recent sessions" />
+        <Stat label="Court activities" value={activities.length} hint={`${basketballMinutes} min across practice, pickup & games`} />
+        <Stat label="Workout minutes" value={totalMinutes} hint="Completed CourtReady sessions" />
         <Stat label="Avg readiness" value={avgReadiness || "—"} hint="Across your last check-ins" />
         <Stat label="Avg RPE" value={avgRpe || "—"} hint={`Streak: ${streak} day${streak === 1 ? "" : "s"}`} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         <div className="space-y-4">
+          <BasketballActivityLog activities={activities} />
           <section className="panel p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -153,7 +163,8 @@ export default function HistoryPage() {
 
         <aside className="space-y-4">
           <section className="panel p-5">
-            <p className="eyebrow">Load · last 14 days</p>
+            <p className="eyebrow">Combined load · last 14 days</p>
+            <p className="mt-1 text-[0.72rem] text-muted">Completed workouts plus logged on-court activity.</p>
             <div className="mt-3">
               {chart.length > 0 ? (
                 <LoadChart data={chart} />
@@ -194,13 +205,16 @@ export default function HistoryPage() {
                     ? "bg-flame"
                     : status === "skipped"
                       ? "bg-amber-500/60"
-                      : status === "planned"
-                        ? "bg-lime/40"
-                        : "bg-[#22261d]";
+                      : day.dayActivities.length > 0
+                        ? "bg-cyan-400/70"
+                        : status === "planned"
+                          ? "bg-lime/40"
+                          : "bg-[#22261d]";
+                const activityText = day.dayActivities.map((activity) => activity.type).join(", ");
                 return (
                   <div
                     key={day.date}
-                    title={`${day.date}: ${status ?? "no session"}`}
+                    title={`${day.date}: ${status ?? "no workout"}${activityText ? ` · ${activityText}` : ""}`}
                     className={`h-5 w-5 rounded-[4px] ${color}`}
                   />
                 );
@@ -215,6 +229,9 @@ export default function HistoryPage() {
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-sm bg-lime/40" /> Planned
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-cyan-400/70" /> Basketball activity
               </span>
             </div>
           </section>

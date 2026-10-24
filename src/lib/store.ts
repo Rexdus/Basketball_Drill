@@ -6,10 +6,14 @@ import {
   buildWorkout,
   computeReadiness,
   daysToGame,
+  isScheduledTrainingDay,
   todayISO,
 } from "@/lib/engine";
+import { parseBackup, runStorageTransaction } from "@/lib/backup";
 import type {
   AthleteProfile,
+  BasketballActivity,
+  BasketballActivityType,
   CheckinInput,
   Goal,
   Intensity,
@@ -29,6 +33,7 @@ const KEYS = {
   athlete: `${NS}:v${VERSION}:athlete`,
   checkins: `${NS}:v${VERSION}:checkins`,
   workouts: `${NS}:v${VERSION}:workouts`,
+  activities: `${NS}:v${VERSION}:activities`,
 } as const;
 
 export type StoredAthlete = AthleteProfile & {
@@ -65,6 +70,7 @@ export type StoreSnapshot = {
   athlete: StoredAthlete | null;
   checkins: StoredCheckin[];
   workouts: StoredWorkout[];
+  activities: BasketballActivity[];
 };
 
 /* ------------------------------------------------------------- primitives */
@@ -123,17 +129,42 @@ export function getWorkout(date: string): StoredWorkout | null {
   return listWorkouts().find((row) => row.date === date) ?? null;
 }
 
-/* ------------------------------------------------------------- derived */
-
-export function recentHardLoad(workouts: StoredWorkout[]): number {
-  const cutoff = addDays(todayISO(), -2);
-  return workouts
-    .filter((row) => row.status === "completed" && row.date >= cutoff)
-    .reduce((acc, row) => acc + row.loadScore / 30, 0);
+export function listBasketballActivities(): BasketballActivity[] {
+  return readJSON<BasketballActivity[]>(KEYS.activities, []).sort((a, b) =>
+    a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date),
+  );
 }
 
-export function readinessForDate(checkins: StoredCheckin[], date = todayISO()): number {
-  return checkins.find((row) => row.date === date)?.readiness ?? 72;
+/* ------------------------------------------------------------- derived */
+
+export function recentHardLoad(
+  workouts: StoredWorkout[],
+  activities: BasketballActivity[] = listBasketballActivities(),
+): number {
+  const today = todayISO();
+  const cutoff = addDays(today, -2);
+  const workoutLoad = workouts
+    .filter((row) => row.status === "completed" && row.date >= cutoff && row.date <= today)
+    .reduce((acc, row) => acc + row.loadScore / 30, 0);
+  const basketballLoad = activities
+    .filter((row) => row.date >= cutoff && row.date <= today)
+    .reduce((acc, row) => {
+      const eventFactor = row.type === "game" ? 1.15 : row.type === "pickup" ? 1.05 : 1;
+      return acc + ((row.durationMin * (row.rpe / 10) * eventFactor) / 30);
+    }, 0);
+  return workoutLoad + basketballLoad;
+}
+
+export function readinessForDate(
+  checkins: StoredCheckin[],
+  date = todayISO(),
+  workouts: StoredWorkout[] = listWorkouts(),
+  activities: BasketballActivity[] = listBasketballActivities(),
+): number {
+  const checkin = checkins.find((row) => row.date === date);
+  if (checkin) return checkin.readiness;
+  const recentLoad = recentHardLoad(workouts, activities);
+  return Math.max(8, 72 - Math.min(12, recentLoad * 1.5));
 }
 
 export function streakOf(workouts: StoredWorkout[]): number {
@@ -188,7 +219,8 @@ function generateFor(
       }
     : null;
   const readiness =
-    readinessOverride ?? (input ? computeReadiness(input, hardLoad) : 72);
+    readinessOverride ??
+    (input ? computeReadiness(input, hardLoad) : Math.max(8, 72 - Math.min(12, hardLoad * 1.5)));
   const plan = buildWorkout({
     profile: athlete,
     checkin: input,
@@ -219,9 +251,16 @@ function generateFor(
 
 export function ensureTodayWorkout(athlete = getAthlete()): StoredWorkout | null {
   if (!athlete) return null;
-  const existing = getWorkout(todayISO());
-  if (existing) return existing;
-  const workout = generateFor(athlete, todayISO());
+  const today = todayISO();
+  const existing = getWorkout(today);
+  const isTrainingDay = daysToGame(athlete, today) === 0 || isScheduledTrainingDay(athlete, today);
+  if (existing && (existing.status !== "planned" || Boolean(existing.plan.isRestDay) === !isTrainingDay)) {
+    return existing;
+  }
+  if (existing) {
+    writeJSON(KEYS.workouts, listWorkouts().filter((row) => row.date !== today));
+  }
+  const workout = generateFor(athlete, today);
   refresh();
   return workout;
 }
@@ -244,6 +283,10 @@ export function saveAthlete(input: AthleteInput): StoredAthlete {
     publicId: existing?.publicId ?? newId(),
     isDemo: existing?.isDemo ?? false,
     units: input.units ?? existing?.units ?? "metric",
+    recurringBasketballDays: input.recurringBasketballDays ?? existing?.recurringBasketballDays ?? {
+      practiceDays: [],
+      gameDays: [],
+    },
     updatedAt: new Date().toISOString(),
   };
   writeJSON(KEYS.athlete, athlete);
@@ -299,10 +342,75 @@ export function skipWorkout(id: number, feedback: string): void {
   refresh();
 }
 
+export function saveBasketballActivity(input: {
+  date: string;
+  type: BasketballActivityType;
+  durationMin: number;
+  rpe: number;
+  notes?: string;
+}): BasketballActivity {
+  const today = todayISO();
+  const parsedDate = new Date(`${input.date}T12:00:00`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.date) ||
+    !Number.isFinite(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== input.date ||
+    input.date > today
+  ) {
+    throw new Error("Choose a valid activity date no later than today.");
+  }
+  if (!["practice", "pickup", "game"].includes(input.type)) {
+    throw new Error("Choose a valid basketball activity type.");
+  }
+  const durationInput = Number.isFinite(input.durationMin) ? input.durationMin : 60;
+  const rpeInput = Number.isFinite(input.rpe) ? input.rpe : 6;
+  const activity: BasketballActivity = {
+    id: newId(),
+    date: input.date,
+    type: input.type,
+    durationMin: Math.round(Math.min(360, Math.max(5, durationInput)) / 5) * 5,
+    rpe: Math.round(Math.min(10, Math.max(1, rpeInput))),
+    notes: input.notes?.trim().slice(0, 300) || null,
+    createdAt: new Date().toISOString(),
+  };
+  writeJSON(KEYS.activities, [...listBasketballActivities(), activity]);
+  refreshTodayReadiness();
+  refresh();
+  if (activity.date >= addDays(today, -2) && activity.date <= today) rebuildUncompletedToday();
+  return activity;
+}
+
+export function deleteBasketballActivity(id: string): void {
+  const activities = listBasketballActivities();
+  const removed = activities.find((activity) => activity.id === id);
+  writeJSON(KEYS.activities, activities.filter((activity) => activity.id !== id));
+  refreshTodayReadiness();
+  refresh();
+  if (removed && removed.date >= addDays(todayISO(), -2) && removed.date <= todayISO()) rebuildUncompletedToday();
+}
+
+function refreshTodayReadiness(): void {
+  const today = todayISO();
+  const checkin = getCheckin(today);
+  if (!checkin) return;
+  const next: StoredCheckin = {
+    ...checkin,
+    readiness: computeReadiness(checkin, recentHardLoad(listWorkouts(), listBasketballActivities())),
+  };
+  writeJSON(KEYS.checkins, listCheckins().map((row) => row.date === today ? next : row));
+}
+
+function rebuildUncompletedToday(): void {
+  const athlete = getAthlete();
+  const workout = getWorkout(todayISO());
+  if (athlete && workout?.status === "planned") regenerateToday(athlete);
+}
+
 export function clearAthlete(): void {
   removeKey(KEYS.athlete);
   removeKey(KEYS.checkins);
   removeKey(KEYS.workouts);
+  removeKey(KEYS.activities);
   refresh();
 }
 
@@ -445,6 +553,7 @@ export function exportData(): string {
       athlete: getAthlete(),
       checkins: listCheckins(),
       workouts: listWorkouts(),
+      activities: listBasketballActivities(),
     },
     null,
     2,
@@ -452,43 +561,44 @@ export function exportData(): string {
 }
 
 export function importData(json: string): { ok: boolean; message: string } {
+  const parsed = parseBackup(json);
+  if (!parsed.ok) return parsed;
+  if (typeof window === "undefined") {
+    return { ok: false, message: "Browser storage is not available; your data was not changed." };
+  }
+
+  const { athlete, checkins, workouts, activities } = parsed.data;
+  let success = false;
   try {
-    const data = JSON.parse(json) as {
-      athlete?: StoredAthlete | null;
-      checkins?: StoredCheckin[];
-      workouts?: StoredWorkout[];
-    };
-    if (!data || typeof data !== "object") {
-      return { ok: false, message: "That file isn't valid CourtReady data." };
-    }
-    const athlete = data.athlete ?? null;
-    const checkins = Array.isArray(data.checkins) ? data.checkins : [];
-    const workouts = Array.isArray(data.workouts) ? data.workouts : [];
-    if (
-      athlete &&
-      (typeof athlete.age !== "number" ||
-        typeof athlete.heightCm !== "number" ||
-        typeof athlete.weightKg !== "number")
-    ) {
-      return { ok: false, message: "The athlete profile in that file looks incomplete." };
-    }
-    writeJSON(KEYS.athlete, athlete);
-    writeJSON(KEYS.checkins, checkins);
-    writeJSON(KEYS.workouts, workouts);
-    if (athlete) ensureTodayWorkout(athlete);
-    refresh();
-    return { ok: true, message: "Data imported. Your dashboard is up to date." };
+    success = runStorageTransaction(
+      window.localStorage,
+      [KEYS.athlete, KEYS.checkins, KEYS.workouts, KEYS.activities],
+      () => {
+        writeJSON(KEYS.athlete, athlete);
+        writeJSON(KEYS.checkins, checkins);
+        writeJSON(KEYS.workouts, workouts);
+        writeJSON(KEYS.activities, activities);
+        if (athlete) ensureTodayWorkout(athlete as StoredAthlete);
+      },
+    );
   } catch {
+    // Accessing localStorage itself can throw in private or restricted contexts.
+    success = false;
+  }
+  if (!success) {
+    refresh();
     return {
       ok: false,
-      message: "Couldn't read that file. Export a backup first, then import it.",
+      message: "Import failed because browser storage is unavailable or full. Your previous data was preserved where possible.",
     };
   }
+  refresh();
+  return { ok: true, message: "Data imported. Your dashboard is up to date." };
 }
 
 /* ------------------------------------------------------------ react hook */
 
-const EMPTY: StoreSnapshot = { athlete: null, checkins: [], workouts: [] };
+const EMPTY: StoreSnapshot = { athlete: null, checkins: [], workouts: [], activities: [] };
 
 let snapshot: StoreSnapshot | null = null;
 const listeners = new Set<() => void>();
@@ -500,6 +610,7 @@ function loadSnapshot(): StoreSnapshot {
       athlete: getAthlete(),
       checkins: listCheckins(),
       workouts: listWorkouts(),
+      activities: listBasketballActivities(),
     };
   }
   return snapshot;

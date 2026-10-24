@@ -355,7 +355,87 @@ export type BuildInput = {
   recentLoad?: number;
 };
 
+/**
+ * Selects exactly `daysPerWeek` evenly distributed training weekdays, anchored
+ * to Monday. Keeping the schedule calendar-based makes it stable across visits
+ * and consistent between the dashboard and the plan preview.
+ */
+export function trainingWeekdays(daysPerWeek: number, blockedWeekdays: number[] = []): number[] {
+  const blocked = new Set(blockedWeekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6));
+  const available = Array.from({ length: 7 }, (_, day) => day).filter((day) => !blocked.has(day));
+  const count = Math.min(available.length, Math.max(1, Math.min(7, Math.round(daysPerWeek) || 1)));
+  if (!count) return [];
+  return Array.from({ length: count }, (_, index) => available[Math.round((index * available.length) / count)]);
+}
+
+function mondayFirstWeekday(date: string): number {
+  return (new Date(`${date}T12:00:00`).getDay() + 6) % 7;
+}
+
+export function basketballCommitmentForDate(
+  profile: Pick<AthleteProfile, "recurringBasketballDays">,
+  date: string,
+): "practice" | "game" | "practice and game" | null {
+  const weekday = mondayFirstWeekday(date);
+  const practices = profile.recurringBasketballDays?.practiceDays?.includes(weekday) ?? false;
+  const games = profile.recurringBasketballDays?.gameDays?.includes(weekday) ?? false;
+  if (practices && games) return "practice and game";
+  if (games) return "game";
+  if (practices) return "practice";
+  return null;
+}
+
+export function isScheduledTrainingDay(
+  profile: Pick<AthleteProfile, "daysPerWeek" | "recurringBasketballDays">,
+  date: string,
+): boolean {
+  const blocked = [
+    ...(profile.recurringBasketballDays?.practiceDays ?? []),
+    ...(profile.recurringBasketballDays?.gameDays ?? []),
+  ];
+  return trainingWeekdays(profile.daysPerWeek, blocked).includes(mondayFirstWeekday(date));
+}
+
+function buildRestDayPlan(readiness: number, commitment: string | null = null): WorkoutPlan {
+  const title = commitment ? `Scheduled ${commitment} day` : "Scheduled rest day";
+  const summary = commitment
+    ? `Your recurring ${commitment} is scheduled today. It counts as basketball workload, so no extra CourtReady session is added.`
+    : "No training session is scheduled today. Prioritize sleep, food, and easy movement if it feels good.";
+  return {
+    title,
+    focus: "recovery",
+    phase: commitment ? "Basketball day" : "Recovery day",
+    intensity: "restore",
+    readinessScore: readiness,
+    readinessLabel: readinessLabel(readiness),
+    durationMin: 0,
+    loadScore: 0,
+    summary,
+    blocks: [],
+    whyThis: [commitment
+      ? `Your recurring ${commitment} is reserved as today's basketball work; adding another workout could stack unnecessary load.`
+      : "Your weekly training schedule includes a rest day here so you have time to recover between sessions."],
+    cautions: [],
+    nutrition: {
+      proteinG: 0,
+      carbsG: 0,
+      waterMl: 0,
+      recoveryTip: "Keep your normal meals and hydration; there is no need to make up missed training today.",
+      gameDayTip: "",
+    },
+    finisher: commitment ? "Log the activity afterward so the next session can account for its workload." : "Rest is part of the plan.",
+    isRestDay: true,
+  };
+}
+
 export function buildWorkout({ profile, checkin, readiness, date, days, recentLoad = 0 }: BuildInput): WorkoutPlan {
+  // A game-day primer remains available even when game day falls on a normal
+  // off day. All other dates obey the athlete's selected weekly frequency.
+  const commitment = basketballCommitmentForDate(profile, date);
+  if (days !== 0 && (commitment || !isScheduledTrainingDay(profile, date))) {
+    return buildRestDayPlan(readiness, commitment);
+  }
+
   const phase = calendarPhase(days, date);
   const focus = chooseFocus(profile, phase, readiness, date);
   const rng = mulberry32(hashString(`${profile.id}-${date}-${focus}-${profile.experience}-${profile.position}`));
@@ -599,7 +679,12 @@ function buildNutrition(profile: AthleteProfile, intensity: Intensity, days: num
 
 export type PreviewDay = PlanDay & { loadScore: number };
 
-export function buildPlanPreview(profile: AthleteProfile, readiness: number, from = todayISO()): PreviewDay[] {
+export function buildPlanPreview(
+  profile: AthleteProfile,
+  readiness: number,
+  from = todayISO(),
+  recentLoad = 0,
+): PreviewDay[] {
   const game = daysToGame(profile, from);
   const span = game !== null && game > 0 && game <= 12 ? game : 6;
   const days: PreviewDay[] = [];
@@ -612,6 +697,7 @@ export function buildPlanPreview(profile: AthleteProfile, readiness: number, fro
       readiness,
       date,
       days: remaining,
+      recentLoad,
     });
     days.push({
       date,

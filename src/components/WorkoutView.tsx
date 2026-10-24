@@ -43,6 +43,33 @@ export function WorkoutView({
   const carbsPct = Math.round((plan.nutrition.carbsG / (bodyWeightKg * 7)) * 100);
   const waterPct = Math.round((plan.nutrition.waterMl / (bodyWeightKg * 50)) * 100);
 
+  if (plan.isRestDay) {
+    return (
+      <section className="panel p-5 sm:p-6" aria-labelledby="rest-day-title">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={plan.phase === "Basketball day" ? "flame" : "outline"}>
+            {plan.phase === "Basketball day" ? "On-court commitment" : "Scheduled off day"}
+          </Badge>
+          <Badge tone="lime">
+            {plan.phase === "Basketball day" ? "Counts as workload" : "Recovery is training"}
+          </Badge>
+        </div>
+        <h2 id="rest-day-title" className="display mt-3 text-3xl text-cream sm:text-4xl">
+          {plan.title}
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sand">{plan.summary}</p>
+        <p className="mt-4 rounded-xl border border-line-soft bg-ink-2/70 p-3 text-[0.82rem] leading-relaxed text-muted">
+          {plan.phase === "Basketball day" ? plan.finisher : plan.nutrition.recoveryTip}
+        </p>
+        {plan.phase === "Basketball day" ? (
+          <Link href="/history" className="mt-3 inline-flex text-[0.8rem] font-semibold text-flame-2">
+            Log practice, pickup, or game →
+          </Link>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="panel overflow-hidden">
