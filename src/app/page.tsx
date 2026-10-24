@@ -23,7 +23,6 @@ import {
   type StoredCheckin,
 } from "@/lib/store";
 import {
-  bmiCategory,
   buildPlanPreview,
   gameCountdownLabel,
   prettyDate,
@@ -324,7 +323,7 @@ export default function HomePage() {
             <div className="flex flex-wrap gap-2">
               <Badge tone="outline">{formatHeight(athlete.heightCm, athlete.units)}</Badge>
               <Badge tone="outline">{formatWeight(athlete.weightKg, athlete.units)}</Badge>
-              <Badge tone="outline">{bmiCategory(athlete)}</Badge>
+              <Badge tone="outline">{athlete.experience} experience</Badge>
               <Badge tone="outline">{athlete.minutes} min sessions</Badge>
             </div>
             <p className="mt-3 text-[0.72rem] leading-snug text-muted">

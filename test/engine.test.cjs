@@ -76,4 +76,37 @@ test("keeps a game-day primer even if tip-off falls on a regular off day", () =>
   assert.equal(plan.isRestDay, undefined);
   assert.equal(plan.title, "Game day primer");
   assert.ok(plan.durationMin > 0);
+  assert.equal(plan.intensity, "maintain");
+});
+
+test("does not use BMI to change impact eligibility or drill selection", () => {
+  const regular = { ...profile, goal: "vertical" };
+  const highBmi = { ...regular, heightCm: 160, weightKg: 140 };
+  const build = (athlete) => buildWorkout({
+    profile: athlete,
+    checkin: null,
+    readiness: 90,
+    date: monday,
+    days: null,
+  });
+  const selectedDrills = (plan) => plan.blocks.flatMap((block) => block.exercises.map((exercise) => exercise.name));
+  assert.deepEqual(selectedDrills(build(highBmi)), selectedDrills(build(regular)));
+});
+
+test("limits each workout to two plyometric drill variations and one impact warm-up", () => {
+  const athlete = { ...profile, goal: "vertical", equipment: ["bodyweight", "ball", "court", "box", "medicine-ball"] };
+  const plan = buildWorkout({ profile: athlete, checkin: null, readiness: 90, date: monday, days: null });
+  const plyo = plan.blocks.find((block) => block.id === "plyo");
+  const warmup = plan.blocks.find((block) => block.id === "warmup");
+  assert.ok(plyo);
+  assert.ok(plyo.exercises.length <= 2);
+  assert.ok(warmup.exercises.filter((exercise) => ["Pogo + snap-down primer", "Quick-feet rope rounds", "Rhythm approach jumps"].includes(exercise.name)).length <= 1);
+});
+
+test("flags youth supervision and technique-first loading", () => {
+  const youth = { ...profile, age: 15, goal: "strength", experience: "advanced" };
+  const plan = buildWorkout({ profile: youth, checkin: null, readiness: 85, date: monday, days: null });
+  assert.ok(plan.cautions.some((caution) => /qualified adult supervision/i.test(caution)));
+  const weighted = plan.blocks.flatMap((block) => block.exercises).filter((exercise) => exercise.load);
+  assert.ok(weighted.every((exercise) => /RPE 6–7/i.test(exercise.load)));
 });

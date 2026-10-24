@@ -79,10 +79,11 @@ test("accepts a complete profile, check-in, and generated workout backup", () =>
   const activity = {
     id: "activity-1",
     date: checkin.date,
-    type: "pickup",
+    type: "outdoor-bike",
     durationMin: 75,
     rpe: 8,
-    notes: "Full-court runs",
+    distanceKm: 18.2,
+    notes: "Steady ride",
     createdAt: "2026-06-03T21:00:00.000Z",
   };
   const parsed = parseBackup(backup({ athlete, checkins: [checkin], workouts: [workout], activities: [activity] }));

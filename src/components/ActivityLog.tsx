@@ -1,20 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import type { BasketballActivity, BasketballActivityType } from "@/lib/types";
-import { deleteBasketballActivity, saveBasketballActivity } from "@/lib/store";
+import type { TrainingActivity, TrainingActivityType, Units } from "@/lib/types";
+import { deleteTrainingActivity, saveTrainingActivity } from "@/lib/store";
 import { prettyDate, todayISO } from "@/lib/engine";
 import { Badge } from "./ui";
 
-const ACTIVITY_LABELS: Record<BasketballActivityType, string> = {
+const ACTIVITY_LABELS: Record<TrainingActivityType, string> = {
   practice: "Team practice",
   pickup: "Pickup game",
   game: "Organized game",
+  "indoor-bike": "Indoor bike workout",
+  "outdoor-bike": "Outdoor bike workout",
 };
 
-export function BasketballActivityLog({ activities }: { activities: BasketballActivity[] }) {
+function isBike(type: TrainingActivityType): boolean {
+  return type === "indoor-bike" || type === "outdoor-bike";
+}
+
+function formatDistance(distanceKm: number, units: Units): string {
+  return units === "imperial"
+    ? `${Math.round((distanceKm / 1.609344) * 10) / 10} mi`
+    : `${Math.round(distanceKm * 10) / 10} km`;
+}
+
+export function ActivityLog({
+  activities,
+  units = "metric",
+}: {
+  activities: TrainingActivity[];
+  units?: Units;
+}) {
   const [date, setDate] = useState(todayISO());
-  const [type, setType] = useState<BasketballActivityType>("practice");
+  const [type, setType] = useState<TrainingActivityType>("practice");
   const [duration, setDuration] = useState(60);
   const [rpe, setRpe] = useState(6);
   const [message, setMessage] = useState<string | null>(null);
@@ -25,11 +43,16 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
     setPending(true);
     try {
       const form = new FormData(event.currentTarget);
-      saveBasketballActivity({
+      const distanceValue = String(form.get("activityDistance") ?? "").trim();
+      const distanceInput = distanceValue ? Number(distanceValue) : null;
+      saveTrainingActivity({
         date,
         type,
         durationMin: duration,
         rpe,
+        distanceKm: distanceInput !== null && Number.isFinite(distanceInput)
+          ? units === "imperial" ? distanceInput * 1.609344 : distanceInput
+          : null,
         notes: String(form.get("activityNotes") ?? ""),
       });
       setMessage(`${ACTIVITY_LABELS[type]} added. Recent workload will shape your next session.`);
@@ -45,10 +68,10 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
     <section className="panel p-5 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">On-court workload</p>
-          <h2 className="mt-1 text-lg font-bold tracking-tight text-cream">Log basketball activity</h2>
+          <p className="eyebrow">Training load</p>
+          <h2 className="mt-1 text-lg font-bold tracking-tight text-cream">Log a workout or court activity</h2>
           <p className="mt-1 max-w-2xl text-[0.78rem] leading-relaxed text-muted">
-            Log practices, pickup, and games. Duration and effort help CourtReady account for your recent court load.
+            Record practices, pickup, games, or indoor and outdoor bike workouts. Duration and effort help CourtReady account for your recent training load.
           </p>
         </div>
         <Badge tone="outline">{activities.length} logged</Badge>
@@ -61,7 +84,7 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
             id="activity-type"
             className="field"
             value={type}
-            onChange={(event) => setType(event.target.value as BasketballActivityType)}
+            onChange={(event) => setType(event.target.value as TrainingActivityType)}
           >
             {Object.entries(ACTIVITY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -107,6 +130,21 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
             onChange={(event) => setRpe(Number(event.target.value))}
           />
         </div>
+        {isBike(type) ? (
+          <div>
+            <label className="field-label" htmlFor="activity-distance">Distance · optional</label>
+            <input
+              id="activity-distance"
+              name="activityDistance"
+              type="number"
+              min={0.1}
+              max={units === "imperial" ? 621 : 1000}
+              step={0.1}
+              className="field"
+              placeholder={units === "imperial" ? "mi" : "km"}
+            />
+          </div>
+        ) : null}
         <div className="sm:col-span-2 lg:col-span-6">
           <label className="field-label" htmlFor="activity-notes">Notes (optional)</label>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -128,7 +166,7 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
 
       {activities.length > 0 ? (
         <div className="mt-5 border-t border-line-soft pt-4">
-          <p className="eyebrow">Recent basketball activity</p>
+          <p className="eyebrow">Recent logged activity</p>
           <ul className="mt-2 divide-y divide-line-soft">
             {activities.slice(0, 12).map((activity) => (
               <li key={activity.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-1">
@@ -139,13 +177,14 @@ export function BasketballActivityLog({ activities }: { activities: BasketballAc
                   </div>
                   <p className="mt-0.5 text-[0.72rem] text-muted">
                     {prettyDate(activity.date)} · {activity.durationMin} min
+                    {activity.distanceKm ? ` · ${formatDistance(activity.distanceKm, units)}` : ""}
                     {activity.notes ? ` · ${activity.notes}` : ""}
                   </p>
                 </div>
                 <button
                   type="button"
                   className="text-[0.72rem] font-medium text-muted transition-colors hover:text-flame-2"
-                  onClick={() => deleteBasketballActivity(activity.id)}
+                  onClick={() => deleteTrainingActivity(activity.id)}
                   aria-label={`Delete ${ACTIVITY_LABELS[activity.type]} from ${activity.date}`}
                 >
                   Remove

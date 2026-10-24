@@ -14,7 +14,7 @@ export type Equipment =
   | "hoop"
   | "court";
 export type Injury = "knee" | "ankle" | "back" | "shoulder" | "hamstring";
-export type BasketballActivityType = "practice" | "pickup" | "game";
+export type TrainingActivityType = "practice" | "pickup" | "game" | "indoor-bike" | "outdoor-bike";
 
 /** Weekday indices use Monday=0 through Sunday=6. */
 export type RecurringBasketballDays = {
@@ -22,12 +22,14 @@ export type RecurringBasketballDays = {
   gameDays: number[];
 };
 
-export type BasketballActivity = {
+export type TrainingActivity = {
   id: string;
   date: string;
-  type: BasketballActivityType;
+  type: TrainingActivityType;
   durationMin: number;
   rpe: number;
+  /** Optional bike distance, stored canonically in kilometers. */
+  distanceKm?: number | null;
   notes: string | null;
   createdAt: string;
 };
